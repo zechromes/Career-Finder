@@ -1,0 +1,9 @@
+node_modules/
+dist/
+runs/
+public/mockServiceWorker.js
+src/types/api.d.ts
+openapi.json
+package-lock.json
+test-results/
+playwright-report/

@@ -1,0 +1,5 @@
+name = "project_manager"
+description = "Keep scope and documentation accurate."
+model = "gpt-6.1-sol"
+model_reasoning_effort = "low"
+developer_instructions = "Read AGENTS.md and agents/skills/project-manager/SKILL.md before work. Follow the assigned role, file ownership, handoff rules, and user constraints. Do not launch live provider checks unless explicitly authorized."

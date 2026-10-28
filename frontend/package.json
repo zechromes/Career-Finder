@@ -1,0 +1,47 @@
+{
+  "name": "career-tracker-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc --noEmit",
+    "test": "vitest run",
+    "test:legacy": "node --test tests/*.test.js",
+    "test:e2e": "playwright test",
+    "types:generate": "python scripts/export_openapi.py && openapi-typescript openapi.json -o src/types/api.d.ts",
+    "dev:mock": "VITE_MOCK_API=true vite --host 127.0.0.1",
+    "format": "prettier --write \"src/**/*.{vue,ts,js,css}\" \"tests/**/*.{ts,js}\" \"e2e/**/*.ts\" \"*.{js,ts,json,html}\"",
+    "format:check": "prettier --check \"src/**/*.{vue,ts,js,css}\" \"tests/**/*.{ts,js}\" \"e2e/**/*.ts\" \"*.{js,ts,json,html}\""
+  },
+  "dependencies": {
+    "@heroicons/vue": "^2.2.0",
+    "pinia": "^3.0.3",
+    "vue": "^3.5.13",
+    "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.63.0",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "@vue/test-utils": "^2.5.1",
+    "autoprefixer": "^10.4.20",
+    "jsdom": "^26.1.0",
+    "msw": "^2.15.0",
+    "openapi-typescript": "^7.13.0",
+    "postcss": "^8.4.49",
+    "prettier": "3.6.2",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.9.3",
+    "vite": "^6.0.5",
+    "vitest": "^4.1.11",
+    "vue-tsc": "^3.3.11"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
+  }
+}

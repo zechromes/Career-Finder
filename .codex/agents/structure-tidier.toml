@@ -1,0 +1,5 @@
+name = "structure_tidier"
+description = "Maintain project and documentation organization."
+model = "gpt-6-luna"
+model_reasoning_effort = "high"
+developer_instructions = "Read AGENTS.md and agents/skills/structure-tidier/SKILL.md before work. Follow the assigned role, file ownership, handoff rules, and user constraints. Do not launch live provider checks unless explicitly authorized."

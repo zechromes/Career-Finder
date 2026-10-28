@@ -1,0 +1,1 @@
+"""Career Tracker search domain."""

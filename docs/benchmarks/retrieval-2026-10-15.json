@@ -1,0 +1,69 @@
+{
+  "dataset": {
+    "kind": "seeded synthetic clustered vectors and job text",
+    "documents": 2000,
+    "dimensions": 128,
+    "queries": 30,
+    "seed": 42,
+    "k": 20
+  },
+  "environment": {
+    "python": "3.14.7",
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "chromadb": "1.5.9",
+    "langchain_chroma": "1.1.0"
+  },
+  "embedding_provider": "none; deterministic synthetic vectors, zero live API calls",
+  "hnsw_configuration": {
+    "hnsw": {
+      "space": "l2",
+      "ef_construction": 100,
+      "ef_search": 100,
+      "max_neighbors": 16,
+      "resize_factor": 1.2,
+      "sync_threshold": 1000
+    },
+    "spann": null,
+    "embedding_function": null
+  },
+  "index_build_ms": 294.687,
+  "exact_vector_baseline": {
+    "samples": 30,
+    "p50_ms": 0.257,
+    "p95_ms": 0.315
+  },
+  "hnsw_vector_search": {
+    "samples": 30,
+    "p50_ms": 0.556,
+    "p95_ms": 0.684,
+    "mean_ann_recall_at_k": 1.0,
+    "minimum_ann_recall_at_k": 1.0,
+    "missed_exact_neighbors_total": 0
+  },
+  "application_hybrid_retrieval": {
+    "samples": 30,
+    "p50_ms": 23.009,
+    "p95_ms": 24.949
+  },
+  "collection_cache_comparison": {
+    "searches_per_mode": 2,
+    "uncached_source_calls": 2,
+    "cached_source_calls": 1,
+    "second_search_cache_hit": true,
+    "identical_posting_pool": true
+  },
+  "human_relevance": {
+    "labeled_cases": 0,
+    "label_coverage": 0,
+    "observed_recall_at_k": null,
+    "strong_match_precision": null,
+    "missed_relevant_jobs": null
+  },
+  "limitations": [
+    "ANN recall measures agreement with exact vector neighbors, not candidate fit.",
+    "Hybrid latency includes Chroma open/get, Python BM25 and RRF for one query signal; excludes embedding network latency and LLM evaluation.",
+    "Warm local timings; no production scraping latency measured.",
+    "No human labels, held-out accuracy evaluation, or real embedding model quality claims.",
+    "Collection comparison uses a synthetic source; call reduction is not measured production speedup."
+  ]
+}

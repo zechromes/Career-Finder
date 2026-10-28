@@ -1,0 +1,36 @@
+# Local configuration and private inputs
+.env
+.env.*
+!.env.example
+Credentials/
+Files/
+
+# Python and tools
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+.DS_Store
+.cache/
+
+# Generated app state and exports
+frontend/runs/
+vector_db/
+vector_db_*/
+extracted_text.txt
+retrieved_jobs.csv
+recommended_jobs*.json
+relevant_jobs.xlsx
+
+# Frontend dependencies and build/test output
+frontend/node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+*.log
+
+# Private saved profiles, resumes, evaluation snapshots and reviews
+data/

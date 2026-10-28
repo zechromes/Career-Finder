@@ -1,0 +1,2 @@
+# Python formatter; application dependencies remain in backend/requirements.txt.
+black==24.8.0

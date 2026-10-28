@@ -1,0 +1,93 @@
+{
+  "dataset": {
+    "kind": "seeded synthetic clustered vectors and job text",
+    "documents": 5000,
+    "dimensions": 1536,
+    "queries": 30,
+    "seed": 42,
+    "k": 20
+  },
+  "environment": {
+    "python": "3.14.7",
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "chromadb": "1.5.9",
+    "langchain_chroma": "1.1.0"
+  },
+  "embedding_provider": "none; deterministic synthetic vectors, zero live API calls",
+  "hnsw_configuration": {
+    "hnsw": {
+      "space": "l2",
+      "ef_construction": 100,
+      "ef_search": 100,
+      "max_neighbors": 16,
+      "resize_factor": 1.2,
+      "sync_threshold": 1000
+    },
+    "spann": null,
+    "embedding_function": null
+  },
+  "index_build_ms": 1114.956,
+  "exact_vector_baseline": {
+    "samples": 30,
+    "p50_ms": 5.507,
+    "p95_ms": 6.009
+  },
+  "hnsw_vector_search": {
+    "samples": 30,
+    "p50_ms": 1.034,
+    "p95_ms": 1.113,
+    "mean_ann_recall_at_k": 0.9983333333333333,
+    "minimum_ann_recall_at_k": 0.95,
+    "missed_exact_neighbors_total": 1
+  },
+  "application_hybrid_retrieval": {
+    "samples": 30,
+    "p50_ms": 62.916,
+    "p95_ms": 126.238
+  },
+  "filtered_hnsw": {
+    "samples": 30,
+    "p50_ms": 7.036,
+    "p95_ms": 7.61,
+    "eligible_documents": 2500,
+    "mean_ann_recall_at_k": 0.9199999999999999,
+    "minimum_ann_recall_at_k": 0.7
+  },
+  "original_hybrid_baseline": {
+    "samples": 30,
+    "p50_ms": 59.212,
+    "p95_ms": 61.602
+  },
+  "shared_hybrid_retrieval": {
+    "samples": 30,
+    "p50_ms": 18.116,
+    "p95_ms": 18.656
+  },
+  "shared_corpus_first_query_ms": 80.779,
+  "paired_ranking_comparison": {
+    "queries": 30,
+    "identical_ordered_shortlists": 30,
+    "all_identical": true
+  },
+  "collection_cache_comparison": {
+    "searches_per_mode": 2,
+    "uncached_source_calls": 2,
+    "cached_source_calls": 1,
+    "second_search_cache_hit": true,
+    "identical_posting_pool": true
+  },
+  "human_relevance": {
+    "labeled_cases": 0,
+    "label_coverage": 0,
+    "observed_recall_at_k": null,
+    "strong_match_precision": null,
+    "missed_relevant_jobs": null
+  },
+  "limitations": [
+    "ANN recall measures agreement with exact vector neighbors, not candidate fit.",
+    "Hybrid latency includes Chroma open/get, Python BM25 and RRF for one query signal; excludes embedding network latency and LLM evaluation.",
+    "Warm local timings; no production scraping latency measured. Shared corpus first-query load is reported separately.",
+    "No human labels, held-out accuracy evaluation, or real embedding model quality claims.",
+    "Collection comparison uses a synthetic source; call reduction is not measured production speedup."
+  ]
+}

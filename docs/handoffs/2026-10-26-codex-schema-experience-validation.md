@@ -1,0 +1,11 @@
+# Extraction schema and mandatory-experience retry repair
+
+- Objective: diagnose and address extraction schema rejection and unsupported mandatory experience failures.
+- Tool/model: Codex / GPT-6 session; no Git repository/branch available.
+- Changed: backend/evaluation/requirements.py, backend/evaluation/providers.py, backend/evaluation/structured_output.py, tests/test_shared_requirements.py, tests/test_structured_output.py, docs/EVALUATION_MODELS.md.
+- Findings: installed langchain_openai defaults dictionary JSON schemas to strict=False when omitted. OpenAI extraction/GPT assessment now explicitly use strict=True; extraction policy v5 invalidates prior extraction cache keys. Saved errors only identify top-level requirements; original malformed payloads are unavailable. Aggregate-only latest state inspection found six schema failures and two experience failures, without logging private values.
+- Retry: assessment validation errors now supply safe correction feedback per job on the existing single retry. Mandatory experience error explains exact shared must_have quote support and null/empty for absent explicit minimum; preferred/unclear guard is retained. Stable cache inputs are not mutated by correction feedback. No scoring, provider fallback or persisted contract changes.
+- Diagnostics: validation errors report schema-defined nested fields, array indices and controlled error descriptions, excluding values, arbitrary extra keys and custom validation text.
+- Skills: backend-engineer and test-engineer; evaluation reviewed under AGENTS.md rules due to documented skill mismatch. Existing evidence/experience policy remains unchanged; no labeled matching-quality gain claimed.
+- Checks: 19 shared-requirement and 7 schema tests passed. Standard scripts/check.sh passed with job-tracker Python: 243 backend, 70 frontend, legacy, contract generation, typecheck/build. Tests cover nested diagnostic privacy, strict configuration, correction of unsupported mandatory experience without changing criteria, and persistent invalid-claim rejection.
+- Limitations/next: no live paid calls; exact prior malformed field is unknown because only generic errors were saved. Restart backend and Retry failed evaluations. Persistent evidence failures remain explicit rather than becoming successful assessments.

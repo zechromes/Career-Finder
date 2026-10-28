@@ -1,0 +1,2 @@
+# Compatibility for existing setup commands.
+-r ../backend/requirements.txt

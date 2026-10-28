@@ -1,0 +1,75 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Career Tracker — animated flowchart</title>
+<style>
+:root{color-scheme:light;--ink:#172f40;--muted:#5c7281;--green:#087f72;--amber:#b86512}*{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,sans-serif;color:var(--ink);background:#f1f5f7}main{max-width:1480px;margin:auto;padding:22px 30px}header{display:flex;justify-content:space-between;align-items:center}h1{font-size:26px;letter-spacing:-.8px;margin:0}header p{color:var(--muted);margin:3px 0 0;font-size:13px}.stamp{font-size:11px;border:1px solid #c6d8d6;border-radius:20px;padding:5px 12px;color:var(--green)}.caption{margin:18px 0 0;background:#143b44;border-radius:12px;padding:15px 20px;display:grid;grid-template-columns:230px 1fr;gap:20px;color:white;min-height:91px}.caption strong{font-size:18px}.caption p{margin:0;color:#d6e9e8;font-size:14px}.viewport{background:#fff;border:1px solid #d7e2e6;border-radius:12px;margin-top:14px;overflow:auto}svg{display:block;width:100%;min-width:1000px;height:auto}svg text{font-family:system-ui,sans-serif}.node rect{fill:#f8fbfc;stroke:#b8cbd4;stroke-width:1.5}.node .title{font-weight:650;font-size:19px;fill:var(--ink)}.node .sub{font-size:11.5px;fill:#5c7281}.node .num{font-size:10px;font-weight:700;letter-spacing:1.4px;fill:#537483}.node.active rect{fill:#e3f7f1;stroke:var(--green);stroke-width:3}.node.active .num{fill:var(--green)}.node:focus{outline:none}.node:focus rect{stroke:#264dcb;stroke-width:3}.node{cursor:pointer}.node.error rect{fill:#fff8ef;stroke:#dab284}.edge{fill:none;stroke:#a7bbc5;stroke-width:2;marker-end:url(#arrow)}.edge.loop{stroke:#bf8a54;stroke-dasharray:6 5;marker-end:url(#amber)}.edge.active{stroke:var(--green);stroke-width:3;marker-end:url(#green)}.edge.loop.active{stroke:#b86512;marker-end:url(#amber)}.label{font-size:12px;fill:#637d8b}.label.amber{fill:#9a5717}.lane{font-size:11px;letter-spacing:2px;fill:#708b99;font-weight:650}.controls{display:flex;align-items:center;gap:10px;margin-top:14px}button{font:inherit;cursor:pointer;border:1px solid #bdcfd6;background:white;color:var(--ink);border-radius:8px;padding:8px 16px;font-size:13px}button:focus-visible,input:focus-visible{outline:3px solid #285bc0;outline-offset:3px}#play{background:var(--green);color:white;border:0;min-width:84px}input{flex:1;accent-color:var(--green);min-width:40px}#count{min-width:58px;font-size:12px}.legend{display:flex;gap:25px;font-size:12px;color:var(--muted);margin-top:12px}.legend i{display:inline-block;width:27px;border-top:2px solid #9fb6c3;vertical-align:middle;margin-right:6px}.legend .loop{border-top:2px dashed #b86512}.legend .active{border-color:var(--green)}footer{font-size:11px;color:var(--muted);margin-top:12px}@media(max-width:700px){main{padding:15px}.stamp{display:none}.caption{grid-template-columns:1fr;gap:7px}.controls{flex-wrap:wrap}.controls input{flex-basis:100%;order:2}.legend{flex-wrap:wrap;gap:8px 20px}h1{font-size:23px}}
+</style></head><body><main>
+<header><div><h1>Career Tracker · animated flowchart</h1><p>Follow the arrows. Select any box to inspect its stage.</p></div><span class="stamp">Code reviewed · 26 October 2026</span></header>
+<section class="caption" aria-label="Current stage"><strong id="stageTitle"></strong><p id="stageText"></p></section>
+<div class="viewport" tabindex="0" aria-label="Workflow diagram; scroll horizontally on smaller screens"><svg viewBox="0 0 1400 870" role="img" aria-labelledby="svgTitle svgDesc"><title id="svgTitle">Career Tracker workflow</title><desc id="svgDesc">Upload and confirm a profile, collect and rank jobs, extract shared requirements, assess concurrently with Claude, GPT and Gemini, validate and score, merge results, save work or find more jobs. Dashed arrows represent retries and further searches.</desc><defs>
+<marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8" fill="#a7bbc5"/></marker><marker id="green" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8" fill="#087f72"/></marker><marker id="amber" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8" fill="#b86512"/></marker></defs>
+<text x="60" y="53" class="lane">USER INPUT → SEARCH → SHORTLIST</text>
+<text x="60" y="217" class="label">Saved profile → confirmation. Empty job pool → finish without evaluation.</text>
+<text x="60" y="239" class="label">Collection failures remain visible; Retry scraping returns to collection.</text>
+<text x="60" y="298" class="lane">PER POSTING · SHARED EVIDENCE · PARALLEL ASSESSMENTS</text>
+<text x="60" y="320" class="label">Cached requirements or private assessments can skip their corresponding model calls.</text>
+<text x="730" y="411" class="label">One frozen list → all providers</text>
+<text x="520" y="605" class="label">Each provider result is validated and scored as it arrives</text>
+<text x="365" y="735" class="label">SSE progress + snapshot polling update the interface</text>
+
+<g id="edges"></g><g id="nodes"></g><g id="particles" aria-hidden="true"></g>
+</svg></div>
+<div class="controls"><button id="prev" aria-label="Previous stage">← Previous</button><button id="play">Pause</button><button id="next" aria-label="Next stage">Next →</button><input id="seek" type="range" min="0" max="10" value="0" aria-label="Animation stage"><span id="count"></span></div>
+<div class="legend"><span><i></i>Normal flow</span><span><i class="active"></i>Highlighted stage</span><span><i class="loop"></i>Recovery / further search</span></div>
+<footer>Illustrative timing, not a live run. No private data or network requests. Parallel branches are not a sequence or an all-jobs barrier.</footer>
+</main><script>
+const NS='http://www.w3.org/2000/svg';
+const nodes=[
+['upload',60,95,'01 · INTAKE','Upload & extract','PDF / local OCR → OpenAI profile',0],
+['confirm',365,95,'02 · USER DECISION','Review & confirm','Profile + search preferences',1],
+['collect',670,95,'03 · COLLECTION','Search job boards','Load descriptions; filter; dedupe',2],
+['rank',975,95,'04 · RETRIEVAL','Rank & shortlist','Semantic + BM25 → top K / all',3],
+['requirements',975,340,'05 · SHARED EXTRACTION','Identify requirements','OpenAI line references → quotes',4],
+['claude',60,465,'06 · PARALLEL','Claude','Same criteria + candidate context',5],
+['gpt',365,465,'06 · PARALLEL','GPT','Same criteria + candidate context',5],
+['gemini',670,465,'06 · PARALLEL','Gemini','Same criteria + candidate context',5],
+['error',60,640,'RECOVERY','Visible failure','Preserve successful assessments',8],
+['validate',365,640,'07 · BACKEND','Validate & score','Evidence rubric + experience rules',6],
+['merge',670,640,'08 · AGGREGATION','Combine results','Compatible lists; final / provisional',7],
+['results',975,640,'08 · INTERFACE','Progressive results','Compare verdicts and evidence',7],
+['retry',60,765,'RECOVERY','Retry failed work','Resume only failed provider/jobs',8],
+['more',670,765,'11 · CONTINUE','Find more jobs','Fresh collection; append new jobs',10],
+['save',975,765,'10 · PERSISTENCE','Save / reopen / export','Keep existing workspace results',9]
+];
+const edges=[
+['a','M280 135 H365',0,[1]],['b','M585 135 H670',0,[2]],['c','M890 135 H975',0,[3]],
+['d','M1085 175 V340',0,[4]],
+['e','M1085 420 V440 H170 V465',0,[5]],['f','M1085 420 V440 H475 V465',0,[5]],['g','M1085 420 V440 H780 V465',0,[5]],
+['h','M170 545 V575 H475 V640',0,[6]],['i','M475 545 V640',0,[6]],['j','M780 545 V575 H475 V640',0,[6]],
+['k','M585 680 H670',0,[7]],['l','M890 680 H975',0,[7]],
+['m','M1085 720 V765',0,[9]],['n','M975 700 H935 V745 H780 V765',0,[10]],
+['o','M780 845 V858 H1335 V33 H780 V95',1,[10]],
+['p','M975 380 H315 V680 H280',1,[8]],['q','M365 680 H280',1,[8]],['r','M170 720 V765',1,[8]],
+['s','M60 805 H25 V269 H1085 V340',1,[8]]
+];
+const stages=[
+['1. Upload and profile extraction','The PDF is checked and read locally, using OCR when needed. OpenAI classifies it and extracts the candidate profile before a workspace is created. Invalid uploads stop here.'],
+['2. Review before searching','The user reviews the profile and confirms roles, locations, boards, filters and shortlist size. A saved profile can enter here without another PDF extraction.'],
+['3. Collect eligible postings','Selected boards are queried in bounded adaptive batches. Available descriptions are loaded, constraints applied and duplicate postings removed. A source failure does not erase other sources’ results.'],
+['4. Rank and publish the shortlist','Semantic and BM25 rankings are fused. Automatic seniority can prioritize compatible titles. Top K (or all) postings appear as pending result rows before provider assessments finish.'],
+['5. Freeze shared requirements','Without candidate data, OpenAI selects source-line ranges. The backend copies original quotes, validates criteria and assigns stable IDs. All evaluators share this list; cache hits skip extraction.'],
+['6. Assess concurrently','Claude, GPT and Gemini each assess the same criteria against the candidate. Providers proceed independently in waves of 15. A successful private assessment-cache hit avoids that provider call.'],
+['7. Validate and compute scores','The backend checks shared IDs, unchanged criteria and quoted evidence. It computes weighted requirement scores and applies professional-experience safeguards. Missing evidence is unknown, not a proven mismatch.'],
+['8. Merge and display results','Provider results appear progressively. Two compatible scores may yield a provisional average; a final score needs all three. Final category requires agreement; incomplete or conflicting verdicts remain For review.'],
+['9. Keep failures explicit; retry selectively','Malformed extraction or assessment receives one correction retry. Persistent failures stay visible. Explicit retries keep successes and reuse valid shared criteria; only failed provider/jobs resume. No silent provider fallback.'],
+['10. Retain and revisit work','Run snapshots, journals and saved profiles preserve work; exports and job-action flags remain available. Public posting caches and private assessment caches are separate stores. Persistence happens throughout, not only at the end.'],
+['11. Search for more jobs','Find more jobs forces fresh collection and appends unseen shortlisted jobs to the same workspace. Prior assessments and flags remain. New jobs follow the same requirement and evaluation path.']
+];
+function make(tag,attrs,parent){let el=document.createElementNS(NS,tag);for(const[k,v]of Object.entries(attrs))el.setAttribute(k,v);parent.append(el);return el}
+for(const[id,d,loop]of edges)make('path',{id:'edge-'+id,d,class:'edge'+(loop?' loop':'')},document.getElementById('edges'));
+for(const[id,x,y,num,title,sub,stage]of nodes){let g=make('g',{id:'node-'+id,class:'node'+(['error','retry'].includes(id)?' error':''),tabindex:0,role:'button','aria-label':title},document.getElementById('nodes'));make('rect',{x,y,width:220,height:80,rx:12},g);for(const[t,dy,cls]of [[num,18,'num'],[title,43,'title'],[sub,64,'sub']]){let text=make('text',{x:x+14,y:y+dy,class:cls},g);text.textContent=t}g.onclick=()=>jump(stage);g.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();jump(stage)}}}
+let stage=0,elapsed=0,playing=!matchMedia('(prefers-reduced-motion: reduce)').matches,last=0;const stepTime=8500;
+function draw(progress=0){document.getElementById('stageTitle').textContent=stages[stage][0];document.getElementById('stageText').textContent=stages[stage][1];for(const[id,,,,,,s]of nodes)document.getElementById('node-'+id).classList.toggle('active',s===stage);document.getElementById('particles').replaceChildren();for(const[id,,loop,steps]of edges){let path=document.getElementById('edge-'+id),active=steps.includes(stage);path.classList.toggle('active',active);if(active){let pt=path.getPointAtLength(path.getTotalLength()*progress);make('circle',{cx:pt.x,cy:pt.y,r:4.5,fill:loop?'#b86512':'#087f72'},document.getElementById('particles'))}}document.getElementById('seek').value=stage;document.getElementById('count').textContent=(stage+1)+' / 11';document.getElementById('play').textContent=playing?'Pause':'Play'}
+function jump(i){stage=(i+11)%11;elapsed=0;draw()}
+document.getElementById('prev').onclick=()=>jump(stage-1);document.getElementById('next').onclick=()=>jump(stage+1);document.getElementById('play').onclick=()=>{playing=!playing;draw()};document.getElementById('seek').oninput=e=>jump(Number(e.target.value));
+function tick(now){if(playing&&last){elapsed+=Math.min(now-last,200);if(elapsed>=stepTime){stage=(stage+1)%11;elapsed=0}draw((elapsed%2000)/2000)}last=now;requestAnimationFrame(tick)}
+window.showWorkflowFrame=(i,p=0)=>{playing=false;stage=i;elapsed=0;draw(p)};draw();requestAnimationFrame(tick);
+</script></body></html>

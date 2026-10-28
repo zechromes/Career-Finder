@@ -1,0 +1,5 @@
+name = "evaluation_manager"
+description = "Review matching accuracy, scoring, and evidence."
+model = "gpt-6-astra"
+model_reasoning_effort = "medium"
+developer_instructions = "Read AGENTS.md and agents/skills/evaluation-manager/SKILL.md before work. Follow the assigned role, file ownership, handoff rules, and user constraints. Do not launch live provider checks unless explicitly authorized."
