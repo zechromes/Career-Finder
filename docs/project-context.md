@@ -1,6 +1,6 @@
 # Career Tracker — Current Project Context
 
-Updated: 28 October 2026 (Australia/Sydney); quick labeling and simpler /eval page added.
+Updated: 28 October 2026 (Australia/Sydney); seniority rule uses stated years for mid-level profiles.
 
 This document describes the implemented application.
 The product is displayed as **Career Signal**; the repository is **Career Tracker**.
@@ -88,7 +88,9 @@ arrangement, seniority, excluded title/company terms, and semantic shortlist siz
   Enter or mouse selection are supported; custom locations still work if the
   provider fails. Commas within a location do not split it into separate chips.
 - Seniority defaults to automatic early-career preference: clearly experienced-level
-  titles are ranked after other titles for graduate/entry/junior profiles. They remain
+  titles are ranked after other titles for graduate/entry/junior profiles. For a
+  profile that is early-career only by years, senior titles are ranked later only
+  when the posting states more years than the profile, or the title is executive. They remain
   in the pool and can fill remaining shortlist slots. Explicit levels override this
   preference; saved `any` choices remain All levels. Unknown experience stays broad.
 - Shortlist choices are 15, 50, 100, or all retrieved jobs (`top_k=0`).

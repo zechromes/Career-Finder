@@ -5,7 +5,7 @@ import re
 import copy
 from typing import Optional
 from backend.evaluation.candidate_fit import (
-    title_exceeds_candidate_level,
+    posting_exceeds_candidate_level,
     experience_context,
 )
 from backend.search.ranking import reciprocal_rank_fusion
@@ -139,11 +139,17 @@ def retrieve_relevant_jobs(
 
         relevant_docs = prioritize_preferences(relevant_docs, dismissal_feedback)
     if prioritize_level:
-        # Stable partition keeps relevance order within each group. Other levels
+        # Stable partition keeps relevance order within each group. Advanced titles
+        # move down only with stated excess years or an executive title; they
         # remain available when the shortlist has room, including top_k=0.
         relevant_docs.sort(
-            key=lambda doc: title_exceeds_candidate_level(
-                doc.metadata.get("title", ""), resume_context, candidate_profile
+            key=lambda doc: posting_exceeds_candidate_level(
+                doc.metadata.get("title", ""),
+                doc.metadata.get("original_content")
+                or doc.metadata.get("job_description")
+                or doc.page_content,
+                resume_context,
+                candidate_profile,
             )
         )
     # Apply the requested evaluation budget after deduplication and level prioritization.

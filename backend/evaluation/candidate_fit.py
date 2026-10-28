@@ -17,10 +17,14 @@ not qualifications. Follow these rules in order:
    Distinguish mandatory requirements from optional/preferred skills. Quote the
    supporting job text verbatim in required_experience_evidence; never invent years.
 3. Compare career level BEFORE technologies and interests. A graduate/entry/junior
-   candidate with 0-2 years is not_suitable for an explicitly mid-level, mid-senior,
-   senior, lead, staff, principal, director or architect-level role, even with strong
-   technology overlap. A clear shortfall in mandatory experience is not_suitable,
-   NOT review. Optional skills and enthusiasm cannot compensate for this gap.
+   candidate is not_suitable for an explicitly mid-level, mid-senior, senior, lead,
+   staff, principal, director or architect-level role, even with strong technology
+   overlap. For a candidate beyond graduate/junior level, a senior, lead, staff or
+   principal title without stated years is not proof of a mismatch: judge the
+   posting's mandatory requirements, and use review when the expected level is
+   unclear. A clear shortfall in mandatory experience, such as a stated minimum of
+   professional years above the candidate's, is not_suitable, NOT review. Optional
+   skills and enthusiasm cannot compensate for this gap.
 4. strong_match requires demonstrated professional scope, appropriate seniority,
    and the core requirements to align. review is for genuinely unclear requirements
    or an otherwise level-appropriate career pivot; it is not a bucket for clearly
@@ -91,13 +95,59 @@ def title_exceeds_candidate_level(title, resume_context="", profile=None):
     return bool(early and advanced and not accepts_juniors)
 
 
+EXECUTIVE_TITLE = re.compile(r"\b(?:director|head of|chief)\b", re.I)
+_YEARS = r"(?:years?|yrs)\b"
+# Years count only when phrased as a requirement, not company age or tenure.
+STATED_YEARS = re.compile(
+    rf"(\d{{1,2}})\s*\+\s*{_YEARS}"
+    rf"|(?:minimum|at least|min\.?)\s*(?:of\s*)?(\d{{1,2}})\s*{_YEARS}"
+    rf"|(\d{{1,2}})\s*(?:(?:-|–|to)\s*\d{{1,2}}\s*)?{_YEARS}[^.\n;]{{0,60}}?\bexperience"
+    rf"|experience[^.\n;]{{0,40}}?\b(\d{{1,2}})\s*\+?\s*{_YEARS}",
+    re.I,
+)
+
+
+def stated_experience_years(text):
+    """Largest years-of-experience requirement stated in posting text, or None."""
+    values = [
+        int(next(group for group in match if group))
+        for match in STATED_YEARS.findall(str(text))
+    ]
+    values = [value for value in values if value <= 20]
+    return max(values) if values else None
+
+
+JUNIOR_LEVELS = {"graduate", "entry", "junior"}
+
+
+def posting_exceeds_candidate_level(title, text, resume_context="", profile=None):
+    """Graduate/entry/junior profiles keep the title gate. A profile that is early-career
+    only by its years is held back by an advanced title only when the posting states
+    more years than the profile records, or the title is executive-level."""
+    if not title_exceeds_candidate_level(title, resume_context, profile):
+        return False
+    if (profile or {}).get("career_level") in JUNIOR_LEVELS or EXECUTIVE_TITLE.search(
+        str(title)
+    ):
+        return True
+    years, _ = experience_context(resume_context, profile)
+    required = stated_experience_years(text)
+    return required is not None and required > (years or 0)
+
+
 def enforce_experience_fit(evaluation, job, resume_context, profile=None):
     """Prevent an optimistic model verdict from overriding a clear experience gap."""
     years, _ = experience_context(resume_context, profile)
     title = str(job.metadata.get("title", ""))
     reason = ""
-    if title_exceeds_candidate_level(title, resume_context, profile):
-        reason = f"Seniority mismatch: the profile is graduate/early-career, while '{title}' is an experienced-level role."
+    if posting_exceeds_candidate_level(title, job.page_content, resume_context, profile):
+        stated = stated_experience_years(job.page_content)
+        if (profile or {}).get("career_level") in JUNIOR_LEVELS:
+            reason = f"Seniority mismatch: the profile is graduate/early-career, while '{title}' is an experienced-level role."
+        elif stated is not None and stated > (years or 0):
+            reason = f"Seniority mismatch: '{title}' asks for {stated} years of experience; the profile records {years or 0:g}."
+        else:
+            reason = f"Seniority mismatch: the profile is early-career, while '{title}' is an executive-level role."
 
     evidence = evaluation.required_experience_evidence.strip()
     normalized = lambda value: " ".join(value.lower().split())

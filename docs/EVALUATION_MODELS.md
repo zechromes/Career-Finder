@@ -60,8 +60,14 @@ interrupt an in-flight request. Both use one SDK retry. No automatic fallback se
 a failed request to another provider.
 
 Matching prioritizes professional experience and responsibility over skills.
-Graduate/early-career profiles cannot receive strong/review recommendations for
-explicitly mid/senior roles. Unknown experience alignment requires review; a clear
+Graduate/entry/junior profiles cannot receive strong/review recommendations for
+explicitly mid/senior roles. A profile that is early-career only by its years
+(two years or fewer, with a mid or unknown career level) is held back by a senior,
+lead, staff or principal title only when the posting states more years of
+experience than the profile records; director, head-of and chief titles are always
+held back. This change (28 October 2026) followed a pilot of 82 human labels in which
+all 15 senior-titled good fits stated no years requirement; see
+`docs/matching-improvements.md`. Unknown experience alignment requires review; a clear
 mandatory experience gap is excluded. Academic study and projects do not count as
 professional employment years. Older profiles use their saved years until regenerated.
 

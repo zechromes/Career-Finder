@@ -5,15 +5,20 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from langchain_core.documents import Document
 from backend.search.retrieval import retrieve_relevant_jobs
-from backend.evaluation.candidate_fit import title_exceeds_candidate_level
+from backend.evaluation.candidate_fit import (
+    posting_exceeds_candidate_level,
+    stated_experience_years,
+    title_exceeds_candidate_level,
+)
 from backend.schemas.contracts import Preferences
 
 
 class SeniorityPriorityTests(unittest.TestCase):
-    def retrieve(self, profile, k):
+    def retrieve(self, profile, k, senior_text="Python"):
         docs = [
             Document(
-                page_content="Python", metadata={"title": title, "url": str(index)}
+                page_content=senior_text if title == "Senior Developer" else "Python",
+                metadata={"title": title, "url": str(index)},
             )
             for index, title in enumerate(
                 [
@@ -57,6 +62,31 @@ class SeniorityPriorityTests(unittest.TestCase):
             ],
         )
         self.assertEqual(self.retrieve(profile, 4)[-1], "Senior Developer")
+
+    def test_mid_level_profile_demotes_senior_titles_only_with_stated_years(self):
+        profile = {"career_level": "mid", "years_of_experience": 2}
+        self.assertEqual(
+            self.retrieve(profile, 2), ["Senior Developer", "Graduate Developer"]
+        )
+        self.assertEqual(
+            self.retrieve(profile, 2, "Minimum of 5 years of Python experience."),
+            ["Graduate Developer", "Developer"],
+        )
+        self.assertTrue(
+            posting_exceeds_candidate_level("Head of AI", "Python", profile=profile)
+        )
+
+    def test_stated_years_ignore_company_age_and_tenure(self):
+        for text, years in [
+            ("5+ years building production services", 5),
+            ("Minimum of 3 years in a similar role", 3),
+            ("3-5 years of commercial experience", 3),
+            ("Experience: at least 4 years with Python", 4),
+            ("We were founded 15 years ago and have 20 years in business.", None),
+            ("Graduate role, no experience needed.", None),
+        ]:
+            with self.subTest(text=text):
+                self.assertEqual(stated_experience_years(text), years)
 
     def test_explicit_all_and_unknown_experience_preserve_order(self):
         # Check the expected behavior: explicit all and unknown experience preserve order.

@@ -200,6 +200,32 @@ class ExperienceFitTests(unittest.TestCase):
                 self.assertEqual(fit, "not_suitable")
                 self.assertIn("Seniority mismatch", reason)
 
+    def test_mid_level_profile_needs_stated_years_for_senior_mismatch(self):
+        profile = {"career_level": "mid", "years_of_experience": 2}
+        senior = Document(
+            page_content="Build Python services. Founded 15 years ago.",
+            metadata={"title": "Senior AI Engineer"},
+        )
+        # A senior title alone no longer overrides the model for a mid-level profile.
+        fit, _ = enforce_experience_fit(
+            self.evaluation(), senior, "Years of experience: 2", profile
+        )
+        self.assertEqual(fit, "strong_match")
+        senior.page_content = "5+ years building production Python services."
+        fit, reason = enforce_experience_fit(
+            self.evaluation(), senior, "Years of experience: 2", profile
+        )
+        self.assertEqual(fit, "not_suitable")
+        self.assertIn("asks for 5 years", reason)
+        executive = Document(
+            page_content="Python services.", metadata={"title": "Head of AI"}
+        )
+        fit, reason = enforce_experience_fit(
+            self.evaluation(), executive, "Years of experience: 2", profile
+        )
+        self.assertEqual(fit, "not_suitable")
+        self.assertIn("executive-level", reason)
+
     def test_clear_experience_gap_cannot_be_hidden_in_review(self):
         job = Document(
             page_content="Minimum 5 years of professional experience required.",
