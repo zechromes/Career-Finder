@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import unicodedata
 from concurrent.futures import Future, TimeoutError
 from threading import Lock
 
@@ -267,6 +268,18 @@ class RequirementLoader:
         return result
 
 
+# Typographic variants a model may substitute when copying text back.
+_TYPOGRAPHY = str.maketrans(
+    {"‘": "'", "’": "'", "‚": "'", "‛": "'", "“": '"', "”": '"', "„": '"', "–": "-", "—": "-"}
+)
+
+
+def _copy_text(value):
+    """Compare copied text without invisible spacing or typographic differences."""
+    text = unicodedata.normalize("NFKC", str(value or "")).translate(_TYPOGRAPHY)
+    return " ".join(text.replace("​", "").split())
+
+
 def align_assessment(evaluation, requirements):
     expected = {row.requirement_id: row for row in requirements.requirements}
     rows = evaluation.requirement_verdicts
@@ -278,15 +291,21 @@ def align_assessment(evaluation, requirements):
         )
     aligned = []
     by_id = {row.requirement_id: row for row in rows}
+    fields = ("requirement", "importance", "job_quote", "section", "type")
     for key, criterion in expected.items():
         row = by_id[key]
-        for field in ("requirement", "importance", "job_quote", "section", "type"):
-            if getattr(row, field) != getattr(criterion, field):
+        for field in fields:
+            if _copy_text(getattr(row, field)) != _copy_text(getattr(criterion, field)):
                 raise EvaluationFailure(
                     "invalid_output",
-                    "Assessment changed a shared requirement. Retry failed evaluations.",
+                    f"Assessment changed shared requirement {key} ({field}). "
+                    "Copy that field exactly from the shared requirements. "
+                    "Retry failed evaluations.",
                 )
-        aligned.append(row)
+        # Keep the shared wording exactly, including characters a model cannot echo.
+        aligned.append(
+            row.model_copy(update={field: getattr(criterion, field) for field in fields})
+        )
     # The legacy years guard must not turn preferred/unclear criteria into a
     # mandatory prerequisite outside the shared list.
     if evaluation.minimum_professional_years is not None and not any(

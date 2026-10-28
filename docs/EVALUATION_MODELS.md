@@ -151,7 +151,11 @@ Single-line postings yield broader quotes; no semantic accuracy gain is claimed.
 
 All evaluators receive the frozen list plus the same candidate context and posting.
 Missing, duplicated or invented IDs and changed canonical fields are invalid
-assessments, retried once under the existing validation policy. Candidate requirement
+assessments, retried once under the existing validation policy; the retry note names
+the requirement ID and field. Canonical fields are compared after Unicode (NFKC)
+normalization, whitespace collapsing and straightening curly quotes and dashes, so a
+model echoing a non-breaking space as a normal space is not a change; the stored
+verdict always keeps the shared wording exactly. Any other rewording still fails. Candidate requirement
 summaries are populated from the shared list. Existing experience/seniority guards
 remain. Unclear importance has weight 1, cannot cause a mandatory mismatch rejection,
 and keeps the final verdict For review. Required/preferred weights remain 2/1.

@@ -170,6 +170,36 @@ class SharedRequirementsTests(unittest.TestCase):
             "req_001",
         )
 
+    def test_invisible_and_typographic_copy_differences_keep_shared_wording(self):
+        # A posting's non-breaking space and curly quote cannot be echoed by most models.
+        posting = "Skills\nMapping client processes and ‘low-code’ apps."
+        shared = validate_requirements(
+            {
+                "requirements": [
+                    dict(
+                        requirement="Process mapping — low-code",
+                        importance="must_have",
+                        job_quote="Mapping client processes and ‘low-code’ apps.",
+                        section="Skills",
+                        type="skill",
+                    )
+                ]
+            },
+            posting,
+        )
+        value = assessment(shared)
+        row = value.requirement_verdicts[0]
+        row.job_quote = "Mapping client  processes and 'low-code' apps."
+        row.requirement = "Process mapping - low-code"
+        aligned = align_assessment(value, shared).requirement_verdicts[0]
+        self.assertEqual(aligned.job_quote, shared.requirements[0].job_quote)
+        self.assertEqual(aligned.requirement, shared.requirements[0].requirement)
+        # Real rewording is still rejected, naming the requirement and field.
+        value = assessment(shared)
+        value.requirement_verdicts[0].requirement = "Process mapping"
+        with self.assertRaisesRegex(EvaluationFailure, r"req_001 \(requirement\)"):
+            align_assessment(value, shared)
+
     def test_concurrent_providers_share_extraction_and_retry_checkpoint(self):
         docs = [Document(page_content=POSTING) for _ in range(3)]
         loader = RequirementLoader()
