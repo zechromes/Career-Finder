@@ -4,6 +4,7 @@ import { RouterLink, useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { api } from '../stores/pipeline'
 import ReviewGuide from '../components/ReviewGuide.vue'
 import QuickLabel from '../components/QuickLabel.vue'
+import StageResults from '../components/StageResults.vue'
 import type { components } from '../types/api'
 type S = components['schemas']
 const route = useRoute()
@@ -22,19 +23,6 @@ const reviewStep = ref<'requirements' | 'evidence'>('requirements')
 // Keep the review mode in the URL so refreshes and shared links reopen it.
 const mode = ref<'quick' | 'detailed'>(route.query.mode === 'detailed' ? 'detailed' : 'quick')
 const job = computed(() => bundle.value?.dataset.jobs[index.value])
-// Plain-language summary of human fit labels; AI-assisted reviews are left out like the metrics.
-const summary = computed(() => {
-  const reviews = Object.values(bundle.value?.labels.jobs || {}).filter((r) => !r.ai_assisted)
-  const good = reviews.filter((r) => r.fit === 'strong_match').length
-  const missed = metrics.value?.retrieval.missed_labeled_positives || []
-  return {
-    good,
-    notFit: reviews.filter((r) => r.fit === 'not_suitable').length,
-    unsure: reviews.filter((r) => r.fit === 'review').length,
-    found: good - missed.length,
-    missed: missed.map((id) => bundle.value?.dataset.jobs.find((j) => j.id === id)?.title || id),
-  }
-})
 function setMode(next: 'quick' | 'detailed') {
   if (next === mode.value) return
   if (dirty.value && !window.confirm('Discard unsaved review changes?')) return
@@ -179,39 +167,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
           Detailed review
         </button>
       </div>
-      <section
-        v-if="metrics"
-        aria-label="Results so far"
-        class="space-y-2 rounded-xl bg-slate-100 p-4 dark:bg-slate-800"
-      >
-        <h2 class="text-xl font-semibold">Results so far</h2>
-        <p v-if="!summary.good && !summary.notFit">
-          No results yet. Label some jobs as Good fit or Not a fit to see how the app did.
-        </p>
-        <template v-else>
-          <p>
-            You marked <strong>{{ summary.good }}</strong> jobs as Good fit,
-            <strong>{{ summary.notFit }}</strong> as Not a fit and {{ summary.unsure }} as Not sure.
-          </p>
-          <p v-if="summary.good">
-            The app's shortlist included
-            <strong>{{ summary.found }} of your {{ summary.good }}</strong> good fits ({{
-              percent(metrics.retrieval.observed_recall_at_k)
-            }}).
-          </p>
-          <p v-if="metrics.retrieval.precision_on_labeled != null">
-            Of the labeled jobs the app shortlisted,
-            <strong>{{ percent(metrics.retrieval.precision_on_labeled) }}</strong> were good fits.
-          </p>
-          <p v-if="summary.missed.length">
-            Good fits the app missed: {{ summary.missed.join(', ') }}
-          </p>
-          <p v-if="summary.good + summary.notFit < 20" class="text-sm">
-            These numbers are rough until you have labeled more jobs: with few labels, one job
-            changes the percentage a lot. Not sure answers are not counted.
-          </p>
-        </template>
-      </section>
+      <StageResults v-if="metrics" :metrics="metrics" :bundle="bundle" />
       <QuickLabel v-if="mode === 'quick'" :dataset-id="id" :bundle="bundle" @saved="quickSaved" />
       <template v-else>
         <section

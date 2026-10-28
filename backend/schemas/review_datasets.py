@@ -71,6 +71,13 @@ class ReviewEvidence(BaseModel):
     profile_quote_found: bool
 
 
+class ModelVerdict(BaseModel):
+    model: str = ""
+    status: str
+    fit_category: str | None = None
+    score: float | None = None
+
+
 class ReviewJob(BaseModel):
     id: str
     title: str
@@ -82,6 +89,9 @@ class ReviewJob(BaseModel):
     criteria: list[ReviewCriterion]
     evidence: list[ReviewEvidence]
     extraction_available: bool
+    # Saved provider verdicts and the app's combined verdict; empty in older snapshots.
+    model_verdicts: dict[str, ModelVerdict] = Field(default_factory=dict)
+    app_verdict: str | None = None
 
 
 class ReviewDataset(BaseModel):
@@ -95,6 +105,8 @@ class ReviewDataset(BaseModel):
     profile_text: str
     target_roles: list[str]
     jobs: list[ReviewJob]
+    # Set when verdicts were added from the source workspace after snapshot creation.
+    verdicts_added_at: float | None = None
 
 
 class ReviewState(BaseModel):
@@ -148,6 +160,46 @@ class EvidenceMetrics(BaseModel):
     verdict_accuracy: float | None
 
 
+class VerdictCounts(BaseModel):
+    strong_match: int = 0
+    review: int = 0
+    not_suitable: int = 0
+
+
+class GenerationMetrics(BaseModel):
+    model: str
+    assessed: int
+    failed: int
+    human_good: VerdictCounts
+    human_not_fit: VerdictCounts
+    strong_match_precision: float | None
+    good_fit_recall: float | None
+    good_fits_rejected: list[str]
+
+
+class MissedJob(BaseModel):
+    id: str
+    title: str
+    experienced_title: bool
+
+
+class StageFunnel(BaseModel):
+    good_fits: int
+    lost_at_retrieval: int
+    not_assessed: int
+    rejected_at_generation: int
+    needs_review: int
+    recommended: int
+
+
+class StageMetrics(BaseModel):
+    verdicts_available: bool
+    funnel: StageFunnel
+    retrieval_missed: list[MissedJob]
+    generation: dict[str, GenerationMetrics]
+    app: GenerationMetrics | None
+
+
 class ReviewMetrics(BaseModel):
     dataset_id: str
     revision: int
@@ -158,4 +210,5 @@ class ReviewMetrics(BaseModel):
     retrieval: ExperimentMetrics
     extraction: ExtractionMetrics
     evidence: dict[str, EvidenceMetrics]
+    stages: StageMetrics
     limitations: list[str]

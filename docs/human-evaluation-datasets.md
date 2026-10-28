@@ -26,6 +26,42 @@ were good fits, and which good fits it missed. Not sure answers and AI-assisted
 reviews are not counted. With fewer than 20 decisive labels, the page warns that
 the numbers are rough.
 
+## Results by RAG stage
+
+The results have four tabs. All of them use only your Good fit and Not a fit
+labels; the reference is human judgment (supervised evaluation). The app is not
+trained on these labels.
+
+- **Overview** traces each of your good fits: recommended as a strong match,
+  shown as needs review, rejected by the AI, shortlisted without a saved verdict,
+  or not shortlisted.
+- **1. Ingestion** explains the stage. Jobs dropped before ranking are not recorded
+  yet, so ingestion losses cannot be measured.
+- **2. Retrieval** reports observed shortlist recall and precision, and lists good
+  fits that were not shortlisted, flagging titles the seniority rule treats as
+  experienced-level for the profile. Rank positions were not saved, so
+  rank-based measures are unavailable.
+- **3. Generation** compares each model's saved verdict, and the app's combined
+  verdict, with your labels on shortlisted jobs: agreement on your good fits
+  (strong match / your good fits), strong-match accuracy (your good fits / model
+  strong matches) and good fits rejected (model not suitable). Failed assessments
+  are counted separately, never as disagreement. Only shortlisted jobs were
+  assessed, so generation results say nothing about jobs outside the shortlist.
+
+Snapshots created from 28 October 2026 store each provider's saved verdict and the
+app's combined verdict. For an older snapshot, add them once from the source
+workspace (while it has not expired):
+
+```sh
+python scripts/add_review_verdicts.py            # the only dataset
+python scripts/add_review_verdicts.py --dataset-id <id>
+```
+
+A row is used only when its URL, title and company identify one frozen job and its
+requirement verdicts equal the evidence frozen in the snapshot, so a later
+re-evaluation is never attached. Labels are not modified. If nothing matches, the
+dataset is left unchanged; `verdicts_added_at` records when verdicts were added.
+
 **Detailed review** (`?mode=detailed`) keeps the full workflow below for checking
 extracted requirements and model evidence. Quick labels keep any detailed
 judgments already saved for a job.
@@ -155,7 +191,8 @@ follows the existing local application model: there is no account isolation.
 
 - Schemas: `backend/schemas/review_datasets.py`.
 - Snapshotting, validation and metrics: `backend/evaluation/review_datasets.py`.
-- UI: `frontend/src/views/ReviewDatasetView.vue` and `ReviewDatasets.vue`.
+- UI: `frontend/src/views/ReviewDatasetView.vue`, `ReviewDatasets.vue`,
+  `QuickLabel.vue` and `StageResults.vue`.
 - `GET/POST /api/review-datasets`: list or create snapshots.
 - `GET /api/review-datasets/{id}`: read immutable evidence and separate labels.
 - `DELETE /api/review-datasets/{id}`: delete the snapshot and its reviews.

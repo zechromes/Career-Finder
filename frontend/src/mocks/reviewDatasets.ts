@@ -21,6 +21,11 @@ const dataset = {
       previously_shortlisted: true,
       tags: ['previously_shortlisted'],
       extraction_available: true,
+      model_verdicts: {
+        gpt: { model: 'synthetic', status: 'complete', fit_category: 'strong_match', score: 85 },
+        claude: { model: 'synthetic', status: 'complete', fit_category: 'not_suitable', score: 30 },
+      },
+      app_verdict: 'review',
       criteria: [
         {
           id: 'criterion1',
@@ -58,6 +63,43 @@ const read = () =>
   )
 const deleted = () => sessionStorage.getItem('career-demo-review-deleted') === 'true'
 const missing = () => HttpResponse.json({ detail: 'Review dataset not found.' }, { status: 404 })
+// Mirror the server's stage report for the single synthetic, shortlisted job.
+const generation = (model: string, verdict: string, fit?: string) => {
+  const good = fit === 'strong_match'
+  const bucket = { strong_match: 0, review: 0, not_suitable: 0, [verdict]: 1 }
+  const empty = { strong_match: 0, review: 0, not_suitable: 0 }
+  const binary = good || fit === 'not_suitable'
+  return {
+    model,
+    assessed: binary ? 1 : 0,
+    failed: 0,
+    human_good: good ? bucket : empty,
+    human_not_fit: fit === 'not_suitable' ? bucket : empty,
+    strong_match_precision: binary && verdict === 'strong_match' ? Number(good) : null,
+    good_fit_recall: good ? Number(verdict === 'strong_match') : null,
+    good_fits_rejected: good && verdict === 'not_suitable' ? ['job1'] : [],
+  }
+}
+const stages = (fit?: string) => {
+  const good = fit === 'strong_match' ? 1 : 0
+  return {
+    verdicts_available: true,
+    funnel: {
+      good_fits: good,
+      lost_at_retrieval: 0,
+      not_assessed: 0,
+      rejected_at_generation: 0,
+      needs_review: good,
+      recommended: 0,
+    },
+    retrieval_missed: [],
+    generation: {
+      claude: generation('synthetic', 'not_suitable', fit),
+      gpt: generation('synthetic', 'strong_match', fit),
+    },
+    app: generation('Combined app verdict', 'review', fit),
+  }
+}
 export const reviewDatasetHandlers = [
   http.get('/api/review-datasets', () =>
     HttpResponse.json(
@@ -143,6 +185,7 @@ export const reviewDatasetHandlers = [
           verdict_accuracy: evidence?.verdict ? Number(evidence.verdict === 'met') : null,
         },
       },
+      stages: stages(review?.fit),
       limitations: ['Synthetic pilot'],
     })
   }),

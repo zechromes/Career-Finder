@@ -1,6 +1,6 @@
 # Career Tracker — Current Project Context
 
-Updated: 28 October 2026 (Australia/Sydney); seniority rule uses stated years for mid-level profiles.
+Updated: 28 October 2026 (Australia/Sydney); review results reported by RAG stage.
 
 This document describes the implemented application.
 The product is displayed as **Career Signal**; the repository is **Career Tracker**.
@@ -492,3 +492,11 @@ fixed random order, three answers with 1/2/3 shortcuts, autosave, a 30-label
 target and a plain-language results summary. Shortlist membership is hidden while
 labeling. Detailed review remains available via ?mode=detailed. Frontend only;
 label contracts and production scoring are unchanged.
+
+## Results by RAG stage — 28 October 2026
+
+At the user's request, review dataset results are split into Overview, Ingestion,
+Retrieval and Generation tabs. Snapshots now store each provider's saved verdict
+and the app's combined verdict; `scripts/add_review_verdicts.py` adds them once to
+older snapshots when the frozen evidence matches. Ingestion losses are not yet
+recorded (planned Phase 2). Production scoring and ranking are unchanged.

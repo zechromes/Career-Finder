@@ -1005,6 +1005,23 @@ export interface components {
         FindMoreRequest: {
             preferences: components["schemas"]["Preferences"];
         };
+        /** GenerationMetrics */
+        GenerationMetrics: {
+            /** Model */
+            model: string;
+            /** Assessed */
+            assessed: number;
+            /** Failed */
+            failed: number;
+            human_good: components["schemas"]["VerdictCounts"];
+            human_not_fit: components["schemas"]["VerdictCounts"];
+            /** Strong Match Precision */
+            strong_match_precision: number | null;
+            /** Good Fit Recall */
+            good_fit_recall: number | null;
+            /** Good Fits Rejected */
+            good_fits_rejected: string[];
+        };
         /** GenerationTrial */
         GenerationTrial: {
             /** Provider */
@@ -1233,6 +1250,15 @@ export interface components {
                 [key: string]: components["schemas"]["EvidenceReview"];
             };
         };
+        /** MissedJob */
+        MissedJob: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Experienced Title */
+            experienced_title: boolean;
+        };
         /** MissingRequirement */
         MissingRequirement: {
             /** Requirement */
@@ -1333,6 +1359,20 @@ export interface components {
             value: string;
             /** Label */
             label: string;
+        };
+        /** ModelVerdict */
+        ModelVerdict: {
+            /**
+             * Model
+             * @default
+             */
+            model: string;
+            /** Status */
+            status: string;
+            /** Fit Category */
+            fit_category?: string | null;
+            /** Score */
+            score?: number | null;
         };
         /** Preferences */
         Preferences: {
@@ -1509,6 +1549,8 @@ export interface components {
             target_roles: string[];
             /** Jobs */
             jobs: components["schemas"]["ReviewJob"][];
+            /** Verdicts Added At */
+            verdicts_added_at?: number | null;
         };
         /** ReviewDatasetSummary */
         ReviewDatasetSummary: {
@@ -1568,6 +1610,12 @@ export interface components {
             evidence: components["schemas"]["ReviewEvidence"][];
             /** Extraction Available */
             extraction_available: boolean;
+            /** Model Verdicts */
+            model_verdicts?: {
+                [key: string]: components["schemas"]["ModelVerdict"];
+            };
+            /** App Verdict */
+            app_verdict?: string | null;
         };
         /** ReviewMetrics */
         ReviewMetrics: {
@@ -1589,6 +1637,7 @@ export interface components {
             evidence: {
                 [key: string]: components["schemas"]["EvidenceMetrics"];
             };
+            stages: components["schemas"]["StageMetrics"];
             /** Limitations */
             limitations: string[];
         };
@@ -1779,6 +1828,34 @@ export interface components {
             /** Source Run Id */
             source_run_id?: string | null;
         };
+        /** StageFunnel */
+        StageFunnel: {
+            /** Good Fits */
+            good_fits: number;
+            /** Lost At Retrieval */
+            lost_at_retrieval: number;
+            /** Not Assessed */
+            not_assessed: number;
+            /** Rejected At Generation */
+            rejected_at_generation: number;
+            /** Needs Review */
+            needs_review: number;
+            /** Recommended */
+            recommended: number;
+        };
+        /** StageMetrics */
+        StageMetrics: {
+            /** Verdicts Available */
+            verdicts_available: boolean;
+            funnel: components["schemas"]["StageFunnel"];
+            /** Retrieval Missed */
+            retrieval_missed: components["schemas"]["MissedJob"][];
+            /** Generation */
+            generation: {
+                [key: string]: components["schemas"]["GenerationMetrics"];
+            };
+            app: components["schemas"]["GenerationMetrics"] | null;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -1791,6 +1868,24 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** VerdictCounts */
+        VerdictCounts: {
+            /**
+             * Strong Match
+             * @default 0
+             */
+            strong_match: number;
+            /**
+             * Review
+             * @default 0
+             */
+            review: number;
+            /**
+             * Not Suitable
+             * @default 0
+             */
+            not_suitable: number;
         };
         /** VerifiedRequirement */
         VerifiedRequirement: {

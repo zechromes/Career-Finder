@@ -1,11 +1,12 @@
 """Human judgments are separate from immutable model evidence; no live providers."""
 
 import copy
+import json
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from langchain_core.documents import Document
 from backend import runs
@@ -36,6 +37,7 @@ class ReviewDatasetTests(unittest.TestCase):
                     company="Example",
                     apply_url="https://example.test/1",
                     job_description="Python required. SQL preferred.",
+                    fit_category="review",
                     model_evaluations={
                         "gpt": dict(
                             status="complete",
@@ -211,6 +213,86 @@ class ReviewDatasetTests(unittest.TestCase):
         self.assertEqual(
             self.client.delete("/api/review-datasets/..").status_code, 404
         )
+
+    def test_stages_trace_good_fits_through_retrieval_and_generation(self):
+        job = self.bundle.dataset.jobs[0]
+        self.assertEqual(job.model_verdicts["gpt"].fit_category, "strong_match")
+        self.assertEqual(job.app_verdict, "review")
+        self.assertEqual(self.bundle.dataset.jobs[1].model_verdicts, {})
+        for revision, job_id in enumerate(["job1", "job2"]):
+            self.client.put(
+                f"/api/review-datasets/{self.id}/jobs/{job_id}",
+                json=dict(
+                    revision=revision, reviewer="A", review=dict(fit="strong_match")
+                ),
+            )
+        stages = self.client.get(f"/api/review-datasets/{self.id}/metrics").json()[
+            "stages"
+        ]
+        self.assertTrue(stages["verdicts_available"])
+        self.assertEqual(
+            stages["funnel"],
+            dict(
+                good_fits=2,
+                lost_at_retrieval=1,
+                not_assessed=0,
+                rejected_at_generation=0,
+                needs_review=1,
+                recommended=0,
+            ),
+        )
+        self.assertEqual(
+            stages["retrieval_missed"],
+            [dict(id="job2", title="Designer", experienced_title=False)],
+        )
+        gpt, claude = stages["generation"]["gpt"], stages["generation"]["claude"]
+        self.assertEqual((gpt["assessed"], gpt["good_fit_recall"]), (1, 1))
+        self.assertEqual(gpt["strong_match_precision"], 1)
+        self.assertEqual(claude["human_good"], dict(strong_match=0, review=1, not_suitable=0))
+        self.assertEqual(claude["good_fit_recall"], 0)
+        self.assertIsNone(claude["strong_match_precision"])
+        self.assertEqual(stages["app"]["human_good"]["review"], 1)
+
+    def test_add_verdicts_backfills_older_snapshot_once(self):
+        path = Path(self.temp.name) / self.id / "dataset.json"
+        older = json.loads(path.read_text())
+        for job in older["jobs"]:
+            job.pop("model_verdicts")
+            job.pop("app_verdict")
+        path.write_text(json.dumps(older))
+        reviews = (Path(self.temp.name) / self.id / "reviews.json").read_bytes()
+        self.assertFalse(service.measure(self.id)["stages"]["verdicts_available"])
+        self.assertEqual(
+            service.add_verdicts(self.id), dict(matched=1, shortlisted=1)
+        )
+        data = service.read(self.id).dataset
+        self.assertIsNotNone(data.verdicts_added_at)
+        self.assertEqual(data.jobs[0].model_verdicts["claude"].fit_category, "review")
+        self.assertEqual(data.jobs[0].app_verdict, "review")
+        self.assertEqual(
+            (Path(self.temp.name) / self.id / "reviews.json").read_bytes(), reviews
+        )
+        with self.assertRaises(HTTPException) as again:
+            service.add_verdicts(self.id)
+        self.assertEqual(again.exception.status_code, 409)
+
+    def test_add_verdicts_skips_newer_assessments_and_leaves_file_unchanged(self):
+        path = Path(self.temp.name) / self.id / "dataset.json"
+        older = json.loads(path.read_text())
+        for job in older["jobs"]:
+            job.pop("model_verdicts")
+            job.pop("app_verdict")
+        path.write_text(json.dumps(older))
+        before = path.read_bytes()
+        # A re-evaluation changed the verdicts, so the frozen evidence no longer matches.
+        gpt = self.state["recommendations"][0]["model_evaluations"]["gpt"]
+        gpt["requirement_verdicts"] = [
+            dict(gpt["requirement_verdicts"][0], verdict="not_met")
+        ]
+        with self.assertRaises(HTTPException) as refused:
+            service.add_verdicts(self.id)
+        self.assertEqual(refused.exception.status_code, 422)
+        self.assertEqual(path.read_bytes(), before)
 
     def test_unknown_keys_bad_quotes_and_incomplete_reviews_rejected(self):
         for review in [

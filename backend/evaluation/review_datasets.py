@@ -14,7 +14,12 @@ from backend import runs
 from backend.paths import REVIEW_DATASETS_DIR
 from backend.evaluation import experiments
 from backend.evaluation.evidence import quoted
-from backend.schemas.review_datasets import ReviewDataset, ReviewState, ReviewBundle
+from backend.schemas.review_datasets import (
+    ModelVerdict,
+    ReviewBundle,
+    ReviewDataset,
+    ReviewState,
+)
 
 LOCK = threading.RLock()
 
@@ -77,6 +82,26 @@ def _identity(row):
         row.get("title", ""),
         row.get("company", ""),
     )
+
+
+def _verdicts(assessments):
+    return {
+        provider: dict(
+            model=assessment.get("evaluation_model_id", ""),
+            status=assessment.get("status", "unknown"),
+            fit_category=(
+                assessment.get("fit_category")
+                if assessment.get("status") == "complete"
+                else None
+            ),
+            score=(
+                assessment.get("score")
+                if assessment.get("status") == "complete"
+                else None
+            ),
+        )
+        for provider, assessment in assessments.items()
+    }
 
 
 def create(source_id):
@@ -190,6 +215,8 @@ def create(source_id):
                 criteria=criteria,
                 evidence=evidence,
                 extraction_available=shared,
+                model_verdicts=_verdicts(assessments),
+                app_verdict=row.get("fit_category") if assessment_matches else None,
             )
         )
     dataset = ReviewDataset(
@@ -255,6 +282,68 @@ def save(identifier, job_id, body):
         return bundle.labels
 
 
+def add_verdicts(identifier):
+    """Add saved verdicts to an older snapshot from its source workspace, once.
+
+    A row is used only when its URL, title and company identify exactly one frozen
+    job and its requirement verdicts are the ones frozen as evidence, so a newer
+    assessment never lends its verdict. Labels are untouched."""
+    with LOCK:
+        bundle = read(identifier)
+        dataset = bundle.dataset
+        if dataset.verdicts_added_at or any(
+            job.model_verdicts or job.app_verdict for job in dataset.jobs
+        ):
+            raise HTTPException(409, "This dataset already has model verdicts.")
+        with runs.RUNS_LOCK:
+            state = copy.deepcopy(runs.RUNS.get(dataset.source_id))
+        if not state:
+            raise HTTPException(404, "The source workspace is no longer available.")
+        candidates = {}
+        for row in state.get("recommendations", []) + state.get(
+            "excluded_recommendations", []
+        ):
+            for url in {row.get("apply_url"), row.get("url")} - {None, ""}:
+                key = (url, row.get("title", ""), row.get("company", ""))
+                candidates.setdefault(key, []).append(row)
+        # Identify the frozen assessment by its provider requirement verdicts.
+        evidence = lambda rows: sorted(
+            (provider, item.get("requirement", ""), item.get("verdict", "unknown"))
+            for provider, assessment in rows.items()
+            if assessment.get("status") == "complete"
+            for item in assessment.get("requirement_verdicts", [])
+        )
+        matched = 0
+        for job in dataset.jobs:
+            found = candidates.get((job.url, job.title, job.company), [])
+            if len(found) != 1:
+                continue
+            row = found[0]
+            frozen = sorted(
+                (item.provider, item.requirement, item.verdict) for item in job.evidence
+            )
+            if not frozen or frozen != evidence(row.get("model_evaluations", {})):
+                continue
+            matched += 1
+            job.model_verdicts = {
+                provider: ModelVerdict(**verdict)
+                for provider, verdict in _verdicts(
+                    row.get("model_evaluations", {})
+                ).items()
+            }
+            job.app_verdict = row.get("fit_category")
+        if not matched:
+            raise HTTPException(
+                422, "No saved verdicts match this dataset; it was left unchanged."
+            )
+        dataset.verdicts_added_at = time.time()
+        _write(_path(identifier) / "dataset.json", dataset.model_dump())
+        return dict(
+            matched=matched,
+            shortlisted=sum(job.previously_shortlisted for job in dataset.jobs),
+        )
+
+
 def delete(identifier):
     # Remove the frozen evidence and its reviews; source workspaces are unaffected.
     with LOCK:
@@ -263,6 +352,94 @@ def delete(identifier):
             raise HTTPException(404, "Review dataset not found.")
         shutil.rmtree(path)
         return {"deleted": True}
+
+
+def _generation(model, pairs):
+    """Compare (human_fit, model_verdict_or_None_if_failed) pairs for binary-labeled jobs."""
+    counts = {"strong_match": {}, "not_suitable": {}}
+    failed, rejected = 0, []
+    for job_id, human, verdict in pairs:
+        if verdict is None:
+            failed += 1
+            continue
+        bucket = counts[human]
+        bucket[verdict] = bucket.get(verdict, 0) + 1
+        if human == "strong_match" and verdict == "not_suitable":
+            rejected.append(job_id)
+    good, bad = counts["strong_match"], counts["not_suitable"]
+    true_strong, false_strong = good.get("strong_match", 0), bad.get("strong_match", 0)
+    good_total = sum(good.values())
+    return dict(
+        model=model,
+        assessed=good_total + sum(bad.values()),
+        failed=failed,
+        human_good=good,
+        human_not_fit=bad,
+        strong_match_precision=(
+            true_strong / (true_strong + false_strong)
+            if true_strong + false_strong
+            else None
+        ),
+        good_fit_recall=true_strong / good_total if good_total else None,
+        good_fits_rejected=rejected,
+    )
+
+
+def _stages(data, labels):
+    """Trace each human good fit through retrieval and generation."""
+    from backend.evaluation.candidate_fit import title_exceeds_candidate_level
+
+    profile = data.profile.model_dump()
+    binary = {
+        job.id: (job, labels[job.id].fit)
+        for job in data.jobs
+        if job.id in labels
+        and labels[job.id].fit in {"strong_match", "not_suitable"}
+    }
+    good = [job for job, fit in binary.values() if fit == "strong_match"]
+    shortlisted = [job for job in good if job.previously_shortlisted]
+    outcome = lambda verdict: sum(job.app_verdict == verdict for job in shortlisted)
+    providers = sorted({p for job, _ in binary.values() for p in job.model_verdicts})
+    generation = {}
+    for provider in providers:
+        pairs, model = [], ""
+        for job, fit in binary.values():
+            verdict = job.model_verdicts.get(provider)
+            if not verdict:
+                continue
+            model = model or verdict.model
+            complete = verdict.status == "complete" and verdict.fit_category
+            pairs.append((job.id, fit, verdict.fit_category if complete else None))
+        generation[provider] = _generation(model, pairs)
+    app_pairs = [
+        (job.id, fit, job.app_verdict)
+        for job, fit in binary.values()
+        if job.previously_shortlisted and job.app_verdict
+    ]
+    return dict(
+        verdicts_available=any(job.app_verdict for job in data.jobs),
+        funnel=dict(
+            good_fits=len(good),
+            lost_at_retrieval=len(good) - len(shortlisted),
+            not_assessed=sum(job.app_verdict is None for job in shortlisted),
+            rejected_at_generation=outcome("not_suitable"),
+            needs_review=outcome("review"),
+            recommended=outcome("strong_match"),
+        ),
+        retrieval_missed=[
+            dict(
+                id=job.id,
+                title=job.title,
+                experienced_title=title_exceeds_candidate_level(
+                    job.title, data.profile_text, profile
+                ),
+            )
+            for job in good
+            if not job.previously_shortlisted
+        ],
+        generation=generation,
+        app=_generation("Combined app verdict", app_pairs) if app_pairs else None,
+    )
 
 
 def measure(identifier):
@@ -365,11 +542,14 @@ def measure(identifier):
             ),
         ),
         evidence=providers,
+        stages=_stages(data, labels),
         limitations=[
             "Single-profile pilot, not a held-out benchmark.",
             "Partial labels yield observed metrics only.",
             "Shared extraction metrics exclude legacy provider-defined criteria.",
             "Quote presence does not prove semantic support.",
             "AI-assisted reviews are excluded from every metric.",
+            "Generation metrics cover only shortlisted jobs, which were the only ones assessed.",
+            "Ingestion losses are not tracked yet.",
         ],
     )

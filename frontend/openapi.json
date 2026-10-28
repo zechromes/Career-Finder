@@ -2341,6 +2341,69 @@
         ],
         "title": "FindMoreRequest"
       },
+      "GenerationMetrics": {
+        "properties": {
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "assessed": {
+            "type": "integer",
+            "title": "Assessed"
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed"
+          },
+          "human_good": {
+            "$ref": "#/components/schemas/VerdictCounts"
+          },
+          "human_not_fit": {
+            "$ref": "#/components/schemas/VerdictCounts"
+          },
+          "strong_match_precision": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strong Match Precision"
+          },
+          "good_fit_recall": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Good Fit Recall"
+          },
+          "good_fits_rejected": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Good Fits Rejected"
+          }
+        },
+        "type": "object",
+        "required": [
+          "model",
+          "assessed",
+          "failed",
+          "human_good",
+          "human_not_fit",
+          "strong_match_precision",
+          "good_fit_recall",
+          "good_fits_rejected"
+        ],
+        "title": "GenerationMetrics"
+      },
       "GenerationTrial": {
         "properties": {
           "provider": {
@@ -2784,6 +2847,29 @@
         "type": "object",
         "title": "JobReview"
       },
+      "MissedJob": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "experienced_title": {
+            "type": "boolean",
+            "title": "Experienced Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "experienced_title"
+        ],
+        "title": "MissedJob"
+      },
       "MissingRequirement": {
         "properties": {
           "requirement": {
@@ -2959,6 +3045,46 @@
           "label"
         ],
         "title": "ModelOption"
+      },
+      "ModelVerdict": {
+        "properties": {
+          "model": {
+            "type": "string",
+            "title": "Model",
+            "default": ""
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "fit_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fit Category"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "ModelVerdict"
       },
       "Preferences": {
         "properties": {
@@ -3330,6 +3456,17 @@
             },
             "type": "array",
             "title": "Jobs"
+          },
+          "verdicts_added_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verdicts Added At"
           }
         },
         "type": "object",
@@ -3487,6 +3624,24 @@
           "extraction_available": {
             "type": "boolean",
             "title": "Extraction Available"
+          },
+          "model_verdicts": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ModelVerdict"
+            },
+            "type": "object",
+            "title": "Model Verdicts"
+          },
+          "app_verdict": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Verdict"
           }
         },
         "type": "object",
@@ -3543,6 +3698,9 @@
             "type": "object",
             "title": "Evidence"
           },
+          "stages": {
+            "$ref": "#/components/schemas/StageMetrics"
+          },
           "limitations": {
             "items": {
               "type": "string"
@@ -3562,6 +3720,7 @@
           "retrieval",
           "extraction",
           "evidence",
+          "stages",
           "limitations"
         ],
         "title": "ReviewMetrics"
@@ -3960,6 +4119,88 @@
         ],
         "title": "SavedProfileInput"
       },
+      "StageFunnel": {
+        "properties": {
+          "good_fits": {
+            "type": "integer",
+            "title": "Good Fits"
+          },
+          "lost_at_retrieval": {
+            "type": "integer",
+            "title": "Lost At Retrieval"
+          },
+          "not_assessed": {
+            "type": "integer",
+            "title": "Not Assessed"
+          },
+          "rejected_at_generation": {
+            "type": "integer",
+            "title": "Rejected At Generation"
+          },
+          "needs_review": {
+            "type": "integer",
+            "title": "Needs Review"
+          },
+          "recommended": {
+            "type": "integer",
+            "title": "Recommended"
+          }
+        },
+        "type": "object",
+        "required": [
+          "good_fits",
+          "lost_at_retrieval",
+          "not_assessed",
+          "rejected_at_generation",
+          "needs_review",
+          "recommended"
+        ],
+        "title": "StageFunnel"
+      },
+      "StageMetrics": {
+        "properties": {
+          "verdicts_available": {
+            "type": "boolean",
+            "title": "Verdicts Available"
+          },
+          "funnel": {
+            "$ref": "#/components/schemas/StageFunnel"
+          },
+          "retrieval_missed": {
+            "items": {
+              "$ref": "#/components/schemas/MissedJob"
+            },
+            "type": "array",
+            "title": "Retrieval Missed"
+          },
+          "generation": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/GenerationMetrics"
+            },
+            "type": "object",
+            "title": "Generation"
+          },
+          "app": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GenerationMetrics"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "verdicts_available",
+          "funnel",
+          "retrieval_missed",
+          "generation",
+          "app"
+        ],
+        "title": "StageMetrics"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -3999,6 +4240,27 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VerdictCounts": {
+        "properties": {
+          "strong_match": {
+            "type": "integer",
+            "title": "Strong Match",
+            "default": 0
+          },
+          "review": {
+            "type": "integer",
+            "title": "Review",
+            "default": 0
+          },
+          "not_suitable": {
+            "type": "integer",
+            "title": "Not Suitable",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "VerdictCounts"
       },
       "VerifiedRequirement": {
         "properties": {
