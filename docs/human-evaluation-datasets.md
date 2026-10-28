@@ -28,6 +28,17 @@ the numbers are rough.
 
 ## Results by RAG stage
 
+### Ingestion recording
+
+Searches started after 28 October 2026 save `ingestion.json` in the run folder:
+board totals, exact drop counts by stage/reason/board, and up to 120 filtered,
+60 description, 60 limit and 50 duplicate postings (descriptions truncated to
+6,000 characters). It is private run data, removed with the run after 7 days, and
+never sent to the browser's live search snapshot. A search served from the
+collection cache records no drops and marks the record incomplete. A review
+dataset copies the record and its dropped postings, excluding any later found in
+the search pool. Dropped-job labels are kept separate from pool metrics.
+
 The results have four tabs. All of them use only your Good fit and Not a fit
 labels; the reference is human judgment (supervised evaluation). The app is not
 trained on these labels.
@@ -35,12 +46,22 @@ trained on these labels.
 - **Overview** traces each of your good fits: recommended as a strong match,
   shown as needs review, rejected by the AI, shortlisted without a saved verdict,
   or not shortlisted.
-- **1. Ingestion** explains the stage. Jobs dropped before ranking are not recorded
-  yet, so ingestion losses cannot be measured.
+- **1. Ingestion** shows how many postings each board returned, how many reached
+  the search pool, and why the rest were dropped (location, posting age, search
+  filters, no usable description, collection limits, duplicates). **Label dropped
+  jobs** opens a quick-labeling queue of postings dropped by filters, missing
+  descriptions or limits (about 20 is enough); the table then shows how many good
+  fits each drop reason removed. Jobs already in the workspace are counted, not
+  stored or labeled. A **duplicate check** asks whether merged pairs were really
+  the same job. A label-free **search text check** reports how many of the AI's
+  requirement quotes survive the cleaning applied before indexing.
 - **2. Retrieval** reports observed shortlist recall and precision, and lists good
   fits that were not shortlisted, flagging titles the seniority rule treats as
   experienced-level for the profile. Rank positions were not saved, so
-  rank-based measures are unavailable.
+  rank-based measures are unavailable. **Compare embedding models (paid)** re-ranks
+  the source workspace's pool with each OpenAI embedding model and scores the top
+  K (up to 20) against your labels; it needs the original search (7 days) and
+  isolates the embedding model, without seniority or dismissal adjustments.
 - **3. Generation** compares each model's saved verdict, and the app's combined
   verdict, with your labels on shortlisted jobs: agreement on your good fits
   (strong match / your good fits), strong-match accuracy (your good fits / model

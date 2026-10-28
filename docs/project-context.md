@@ -1,6 +1,6 @@
 # Career Tracker — Current Project Context
 
-Updated: 28 October 2026 (Australia/Sydney); review results reported by RAG stage.
+Updated: 28 October 2026 (Australia/Sydney); ingestion drops recorded for evaluation.
 
 This document describes the implemented application.
 The product is displayed as **Career Signal**; the repository is **Career Tracker**.
@@ -500,3 +500,13 @@ Retrieval and Generation tabs. Snapshots now store each provider's saved verdict
 and the app's combined verdict; `scripts/add_review_verdicts.py` adds them once to
 older snapshots when the frozen evidence matches. Ingestion losses are not yet
 recorded (planned Phase 2). Production scoring and ranking are unchanged.
+
+## Ingestion recording and stage checks — 28 October 2026
+
+At the user's request, each search records the postings dropped during ingestion
+with their stage and reason (bounded `ingestion.json` per run, 7-day retention).
+Review datasets copy that record; the Ingestion tab shows drop reasons, a
+dropped-job labeling queue, a duplicate-merge check and a label-free search-text
+check. The Retrieval tab can run the paid embedding comparison on the dataset's
+source workspace. Collection, filtering, ranking and scoring behavior are
+unchanged; recording only observes them.

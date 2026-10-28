@@ -55,6 +55,50 @@ const dataset = {
       ],
     },
   ],
+  ingestion: {
+    searches: 1,
+    complete: true,
+    collected: { linkedin: 6 },
+    kept: 1,
+    omitted: 0,
+    counts: [
+      { stage: 'filter', reason: 'location does not match', board: 'linkedin', count: 3 },
+      { stage: 'deduplicate', reason: 'duplicate posting', board: 'linkedin', count: 1 },
+      { stage: 'deduplicate', reason: 'already in this workspace', board: 'linkedin', count: 1 },
+    ],
+  },
+  dropped_jobs: [
+    {
+      id: 'dropped1',
+      title: 'Data Analyst',
+      company: 'Example',
+      location: 'Melbourne',
+      url: 'https://example.test/dropped/1',
+      board: 'linkedin',
+      stage: 'filter',
+      reason: 'location does not match',
+      description: 'SQL and Python analysis.',
+    },
+    {
+      id: 'dropped2',
+      title: 'Python Developer',
+      company: 'Example',
+      location: 'Sydney',
+      url: 'https://example.test/dropped/2',
+      board: 'linkedin',
+      stage: 'deduplicate',
+      reason: 'duplicate posting',
+      description: 'Python required. SQL preferred.',
+      duplicate_of: {
+        title: 'Python Developer',
+        company: 'Example',
+        url: 'https://example.test/1',
+        board: 'indeed',
+        description: 'Python required. SQL preferred.',
+        method: 'same title, company and location; near-identical description',
+      },
+    },
+  ],
 }
 const read = () =>
   JSON.parse(
@@ -80,12 +124,53 @@ const generation = (model: string, verdict: string, fit?: string) => {
     good_fits_rejected: good && verdict === 'not_suitable' ? ['job1'] : [],
   }
 }
-const stages = (fit?: string) => {
+// Mirror the server's ingestion report for the synthetic dropped postings.
+const ingestion = (labels: {
+  jobs: Record<string, { fit?: string; duplicate_correct?: boolean }>
+}) => {
+  const dropped = labels.jobs.dropped1?.fit
+  const binary = dropped === 'strong_match' || dropped === 'not_suitable'
+  const good = dropped === 'strong_match' ? 1 : 0
+  const same = labels.jobs.dropped2?.duplicate_correct
+  return {
+    available: true,
+    complete: true,
+    searches: 1,
+    collected: 6,
+    kept: 1,
+    omitted: 0,
+    by_reason: [
+      {
+        stage: 'filter',
+        reason: 'location does not match',
+        count: 3,
+        labeled: binary ? 1 : 0,
+        good_fits: good,
+      },
+      { stage: 'deduplicate', reason: 'duplicate posting', count: 1, labeled: 0, good_fits: 0 },
+    ],
+    by_board: [{ board: 'linkedin', collected: 6, dropped: 4 }],
+    dropped_recorded: 1,
+    labeled: binary ? 1 : 0,
+    good_fits: good,
+    duplicates: {
+      recorded: 1,
+      judged: same == null ? 0 : 1,
+      same: same ? 1 : 0,
+      precision: same == null ? null : Number(same),
+    },
+    search_text: { jobs_checked: 1, quotes: 1, kept: 1, rate: 1, lowest: [] },
+  }
+}
+const stages = (fit: string | undefined, labels: Parameters<typeof ingestion>[0]) => {
   const good = fit === 'strong_match' ? 1 : 0
+  const report = ingestion(labels)
   return {
     verdicts_available: true,
+    ingestion: report,
     funnel: {
-      good_fits: good,
+      good_fits: good + report.good_fits,
+      lost_at_ingestion: report.good_fits,
       lost_at_retrieval: 0,
       not_assessed: 0,
       rejected_at_generation: 0,
@@ -128,7 +213,7 @@ export const reviewDatasetHandlers = [
     sessionStorage.removeItem('career-demo-human-reviews')
     return HttpResponse.json({ deleted: true })
   }),
-  http.put('/api/review-datasets/:id/jobs/:job', async ({ request }) => {
+  http.put('/api/review-datasets/:id/jobs/:job', async ({ request, params }) => {
     const body = (await request.json()) as { revision: number; reviewer: string; review: unknown }
     const labels = read()
     if (labels.revision !== body.revision)
@@ -136,8 +221,8 @@ export const reviewDatasetHandlers = [
         { detail: 'Reviews changed in another tab. Reload before saving.' },
         { status: 409 },
       )
-    labels.jobs.job1 = body.review
-    labels.reviewers.job1 = body.reviewer
+    labels.jobs[params.job as string] = body.review
+    labels.reviewers[params.job as string] = body.reviewer
     labels.revision++
     labels.updated_at = Date.now() / 1000
     sessionStorage.setItem('career-demo-human-reviews', JSON.stringify(labels))
@@ -185,7 +270,7 @@ export const reviewDatasetHandlers = [
           verdict_accuracy: evidence?.verdict ? Number(evidence.verdict === 'met') : null,
         },
       },
-      stages: stages(review?.fit),
+      stages: stages(review?.fit, labels),
       limitations: ['Synthetic pilot'],
     })
   }),

@@ -361,6 +361,8 @@ not negative judgments. Results do not claim token use, billing cost or full rec
 - Record reviewer attribution and revisions; reject stale concurrent saves.
 - Let reviewers mark a review as AI-assisted; keep it but exclude it from every metric.
 - Let users delete a review dataset and its reviews after confirmation.
+- Report results by RAG stage (ingestion, retrieval, generation). Record postings
+   dropped during ingestion with reasons so reviewers can label a sample of them.
 - Compute metrics from saved human reviews only. Show empty denominators as
    "Not reviewed", never as zero accuracy.
 - Do not generate labels by model, or infer them from model verdicts, action flags
@@ -385,6 +387,7 @@ and expiry and contain private data.
 | Dismissal preferences | Persist with the owning saved resume or temporary run |
 | Experiment results | Server memory only: up to 24 hours, latest 20, cleared on restart |
 | Human review datasets and reviews | Retain until deleted by the user; survive workspace deletion and expiry |
+| Ingestion drop records | Bounded per search; kept with the run for seven days |
 
 - Cache keys must separate materially different inputs and policy versions.
 - Empty, cancelled or detected failed collections must not be cached as complete.

@@ -2,6 +2,7 @@
 from backend.observability import stage, submit, mark
 from backend.search.embedding_cache import CachedJobEmbeddings
 from backend.search.collection_cache import CollectionCache
+from backend.search import ingestion_log
 from backend.paths import JOB_EMBEDDING_CACHE_DIR
 from difflib import SequenceMatcher
 from backend.search.embedding_text import job_embedding_text
@@ -139,6 +140,11 @@ def _filter_recent_jobs(jobs: list[dict], days_old: int) -> list[dict]:
     if days_old == 0:
         return jobs
     recent = [job for job in jobs if _is_recent(job.get("posted_at", ""), days_old)]
+    if ingestion_log.active():
+        kept = {id(job) for job in recent}
+        for job in jobs:
+            if id(job) not in kept:
+                ingestion_log.drop(job, "filter", "posted too long ago")
     removed = len(jobs) - len(recent)
     if removed:
         print(f"Removed {removed} jobs older than {days_old} day(s).")
@@ -667,6 +673,9 @@ def fetch_job_vacancies(
     jobs, hit = CollectionCache().collect(
         parameters, fetch, should_cancel, force_refresh
     )
+    if hit:
+        # The original collection's drops were not recorded with the cache entry.
+        ingestion_log.mark_cached()
     # Recheck date eligibility now, not only when the cache entry was created.
     jobs = _newest_first(_filter_recent_jobs(jobs, posted_days_old))
     if should_cancel and should_cancel():
@@ -819,7 +828,7 @@ def _fetch_job_vacancies_uncached(
             board_cooldown,
             seek,
         )
-        from backend.search.filters import matches_search_filters, work_arrangement
+        from backend.search.filters import filter_reason, work_arrangement
         from backend.search.history import unseen_postings
 
         filters = dict(search_filters or {})
@@ -912,16 +921,37 @@ def _fetch_job_vacancies_uncached(
                 logger.removeHandler(observer)
 
         def early(job):
-            if not _location_matches(job.get("location", ""), locations) or (
-                posted_days_old
-                and not _is_recent(job.get("posted_at", ""), posted_days_old)
+            reason = ""
+            if not _location_matches(job.get("location", ""), locations):
+                reason = "location does not match"
+            elif posted_days_old and not _is_recent(
+                job.get("posted_at", ""), posted_days_old
             ):
-                return False
-            # Unknown work arrangement may need a description; don't reject it yet.
-            early_filters = dict(filters)
-            if work_arrangement(job) == "unknown":
-                early_filters["work_type"] = "any"
-            return matches_search_filters(job, early_filters)
+                reason = "posted too long ago"
+            else:
+                # Unknown work arrangement may need a description; don't reject it yet.
+                early_filters = dict(filters)
+                if work_arrangement(job) == "unknown":
+                    early_filters["work_type"] = "any"
+                reason = filter_reason(job, early_filters)
+            if reason:
+                ingestion_log.drop(job, "filter", reason)
+            return not reason
+
+        def final(job):
+            reason = filter_reason(job, filters)
+            if reason:
+                ingestion_log.drop(job, "filter", reason + " (after description)")
+            return not reason
+
+        def unique(jobs, previous):
+            workspace = list(seen_postings or [])
+            kept = unseen_postings(jobs, workspace + previous)
+            if ingestion_log.active():
+                ingestion_log.record_duplicates(
+                    jobs, kept, known=previous + workspace, workspace=workspace
+                )
+            return kept
 
         glassdoor = jobspy_details.GlassdoorDetails()
 
@@ -975,10 +1005,8 @@ def _fetch_job_vacancies_uncached(
             cards,
             hydrate,
             early,
-            lambda job: matches_search_filters(job, filters),
-            lambda jobs, previous: unseen_postings(
-                jobs, list(seen_postings or []) + previous
-            ),
+            final,
+            unique,
             adaptive_config,
             on_status=on_status,
             on_progress=on_progress,

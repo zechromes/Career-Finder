@@ -671,6 +671,15 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** BoardCount */
+        BoardCount: {
+            /** Board */
+            board: string;
+            /** Collected */
+            collected: number;
+            /** Dropped */
+            dropped: number;
+        };
         /** Body_start_job_search */
         Body_start_job_search: {
             /** Queries */
@@ -780,6 +789,54 @@ export interface components {
              * @default
              */
             seniority: string;
+        };
+        /** DroppedJob */
+        DroppedJob: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Company */
+            company: string;
+            /** Location */
+            location: string;
+            /** Url */
+            url: string;
+            /** Board */
+            board: string;
+            /** Stage */
+            stage: string;
+            /** Reason */
+            reason: string;
+            /** Description */
+            description: string;
+            duplicate_of?: components["schemas"]["DuplicateOf"] | null;
+        };
+        /** DuplicateMetrics */
+        DuplicateMetrics: {
+            /** Recorded */
+            recorded: number;
+            /** Judged */
+            judged: number;
+            /** Same */
+            same: number;
+            /** Precision */
+            precision: number | null;
+        };
+        /** DuplicateOf */
+        DuplicateOf: {
+            /** Title */
+            title: string;
+            /** Company */
+            company: string;
+            /** Url */
+            url: string;
+            /** Board */
+            board: string;
+            /** Description */
+            description: string;
+            /** Method */
+            method: string;
         };
         /** EvaluationError */
         EvaluationError: {
@@ -1043,6 +1100,61 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** IngestionCount */
+        IngestionCount: {
+            /** Stage */
+            stage: string;
+            /** Reason */
+            reason: string;
+            /** Board */
+            board: string;
+            /** Count */
+            count: number;
+        };
+        /** IngestionMetrics */
+        IngestionMetrics: {
+            /** Available */
+            available: boolean;
+            /** Complete */
+            complete: boolean;
+            /** Searches */
+            searches: number;
+            /** Collected */
+            collected: number;
+            /** Kept */
+            kept: number;
+            /** Omitted */
+            omitted: number;
+            /** By Reason */
+            by_reason: components["schemas"]["ReasonCount"][];
+            /** By Board */
+            by_board: components["schemas"]["BoardCount"][];
+            /** Dropped Recorded */
+            dropped_recorded: number;
+            /** Labeled */
+            labeled: number;
+            /** Good Fits */
+            good_fits: number;
+            duplicates: components["schemas"]["DuplicateMetrics"];
+            search_text: components["schemas"]["SearchTextMetrics"];
+        };
+        /** IngestionRecord */
+        IngestionRecord: {
+            /** Searches */
+            searches: number;
+            /** Complete */
+            complete: boolean;
+            /** Collected */
+            collected: {
+                [key: string]: number;
+            };
+            /** Kept */
+            kept: number;
+            /** Counts */
+            counts: components["schemas"]["IngestionCount"][];
+            /** Omitted */
+            omitted: number;
+        };
         /** JobActionUpdate */
         JobActionUpdate: {
             /** Key */
@@ -1229,6 +1341,8 @@ export interface components {
              * @default false
              */
             ai_assisted: boolean;
+            /** Duplicate Correct */
+            duplicate_correct?: boolean | null;
             /**
              * Notes
              * @default
@@ -1419,6 +1533,19 @@ export interface components {
             profile: components["schemas"]["ResumeProfile"];
             preferences: components["schemas"]["Preferences"];
         };
+        /** ReasonCount */
+        ReasonCount: {
+            /** Stage */
+            stage: string;
+            /** Reason */
+            reason: string;
+            /** Count */
+            count: number;
+            /** Labeled */
+            labeled: number;
+            /** Good Fits */
+            good_fits: number;
+        };
         /** ResumeProfile */
         ResumeProfile: {
             /**
@@ -1551,6 +1678,9 @@ export interface components {
             jobs: components["schemas"]["ReviewJob"][];
             /** Verdicts Added At */
             verdicts_added_at?: number | null;
+            ingestion?: components["schemas"]["IngestionRecord"] | null;
+            /** Dropped Jobs */
+            dropped_jobs?: components["schemas"]["DroppedJob"][];
         };
         /** ReviewDatasetSummary */
         ReviewDatasetSummary: {
@@ -1828,10 +1958,36 @@ export interface components {
             /** Source Run Id */
             source_run_id?: string | null;
         };
+        /** SearchTextJob */
+        SearchTextJob: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Kept */
+            kept: number;
+            /** Total */
+            total: number;
+        };
+        /** SearchTextMetrics */
+        SearchTextMetrics: {
+            /** Jobs Checked */
+            jobs_checked: number;
+            /** Quotes */
+            quotes: number;
+            /** Kept */
+            kept: number;
+            /** Rate */
+            rate: number | null;
+            /** Lowest */
+            lowest: components["schemas"]["SearchTextJob"][];
+        };
         /** StageFunnel */
         StageFunnel: {
             /** Good Fits */
             good_fits: number;
+            /** Lost At Ingestion */
+            lost_at_ingestion: number;
             /** Lost At Retrieval */
             lost_at_retrieval: number;
             /** Not Assessed */
@@ -1848,6 +2004,7 @@ export interface components {
             /** Verdicts Available */
             verdicts_available: boolean;
             funnel: components["schemas"]["StageFunnel"];
+            ingestion: components["schemas"]["IngestionMetrics"];
             /** Retrieval Missed */
             retrieval_missed: components["schemas"]["MissedJob"][];
             /** Generation */

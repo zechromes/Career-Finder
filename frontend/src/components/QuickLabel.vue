@@ -5,10 +5,18 @@ import { api } from '../stores/pipeline'
 import type { components } from '../types/api'
 type S = components['schemas']
 type Fit = 'strong_match' | 'review' | 'not_suitable'
-const props = defineProps<{ datasetId: string; bundle: S['ReviewBundle'] }>()
+const props = defineProps<{ datasetId: string; bundle: S['ReviewBundle']; dropped?: boolean }>()
 const emit = defineEmits<{ saved: [labels: S['ReviewState']] }>()
-// About 30 random labels give a first, rough result without reviewing every job.
-const TARGET = 30
+// About 30 random labels give a first, rough result without reviewing every job;
+// a smaller sample of dropped postings shows whether ingestion loses good fits.
+const TARGET = props.dropped ? 20 : 30
+// Only drops that could remove a posting before ranking are worth labeling.
+const LOSS_STAGES = ['filter', 'description', 'budget']
+const items = computed<(S['ReviewJob'] | S['DroppedJob'])[]>(() =>
+  props.dropped
+    ? props.bundle.dataset.dropped_jobs!.filter((job) => LOSS_STAGES.includes(job.stage))
+    : props.bundle.dataset.jobs,
+)
 const choices: { value: Fit; label: string; key: string; hint: string }[] = [
   {
     value: 'strong_match',
@@ -56,8 +64,8 @@ function shuffled(ids: string[], seed: string) {
 }
 const order = computed(() =>
   shuffled(
-    props.bundle.dataset.jobs.map((job) => job.id),
-    props.bundle.dataset.id,
+    items.value.map((job) => job.id),
+    props.bundle.dataset.id + (props.dropped ? ':dropped' : ''),
   ),
 )
 const saved = (id: string) => props.bundle.labels.jobs?.[id]
@@ -68,7 +76,7 @@ const currentId = computed(
     order.value.find((id) => saved(id)?.fit == null && !skipped.value.has(id)) ||
     '',
 )
-const job = computed(() => props.bundle.dataset.jobs.find((item) => item.id === currentId.value))
+const job = computed(() => items.value.find((item) => item.id === currentId.value))
 const remainingSkipped = computed(
   () => order.value.filter((id) => saved(id)?.fit == null && skipped.value.has(id)).length,
 )
@@ -157,7 +165,7 @@ onMounted(() => {
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 </script>
 <template>
-  <section aria-label="Quick labeling" class="space-y-4">
+  <section :aria-label="dropped ? 'Label dropped jobs' : 'Quick labeling'" class="space-y-4">
     <div class="space-y-2">
       <p class="font-semibold">
         {{ labeledCount }} labeled · aim for {{ TARGET }}
@@ -179,8 +187,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         />
       </div>
       <p class="text-sm text-slate-600 dark:text-slate-300">
-        Jobs appear in a random order, so any 30 you label are a fair sample. Answer from the
-        posting and your profile only.
+        <template v-if="dropped">
+          These jobs were dropped before ranking. Labeling about 20 shows whether the app throws
+          away good fits early. They appear in a random order; answer from the posting and your
+          profile only.
+        </template>
+        <template v-else>
+          Jobs appear in a random order, so any 30 you label are a fair sample. Answer from the
+          posting and your profile only.
+        </template>
       </p>
     </div>
     <label class="field-label"
@@ -212,8 +227,20 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         tabindex="0"
         aria-label="Job posting text"
       >
-        <p class="whitespace-pre-wrap break-words">{{ job.description }}</p>
+        <p v-if="job.description" class="whitespace-pre-wrap break-words">{{ job.description }}</p>
+        <p v-else>
+          No description was collected for this job. Open the original posting to judge it.
+        </p>
       </div>
+      <p v-if="job.url">
+        <a
+          :href="job.url"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-indigo-700 underline dark:text-indigo-300"
+          >Open the original posting</a
+        >
+      </p>
       <div class="flex flex-wrap gap-3" role="group" aria-label="Is this job a good fit?">
         <button
           v-for="choice in choices"
@@ -255,7 +282,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     </article>
     <div v-else class="space-y-2 rounded-xl bg-slate-100 p-4 dark:bg-slate-800">
       <p class="font-semibold">
-        {{ remainingSkipped ? 'No more unskipped jobs.' : 'Every job in this dataset is labeled.' }}
+        {{
+          remainingSkipped
+            ? 'No more unskipped jobs.'
+            : dropped
+              ? 'Every recorded dropped job is labeled.'
+              : 'Every job in this dataset is labeled.'
+        }}
       </p>
       <button
         v-if="remainingSkipped"

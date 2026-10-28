@@ -24,6 +24,7 @@ import backend.profiles.service as profiles_service
 import backend.runs as runs
 import backend.evaluation.orchestration as orchestration
 import backend.search.collection as collection
+import backend.search.ingestion_log as ingestion_log
 import backend.search.retrieval as retrieval
 
 
@@ -132,61 +133,83 @@ def execute_job_search(run_id, resume_path, options):
             scrape_errors.append(message)
             runs.update_run(run_id, scrape_errors=list(scrape_errors))
 
-        jobs = collection.fetch_job_vacancies(
-            options["queries"],
-            options["locations"],
-            options["platforms"],
-            adaptive=True,
-            seen_postings=seen_postings if append else None,
-            remote=options["remote"],
-            posted_days_old=options["posted_days_old"],
-            on_progress=lambda count: runs.update_run(
-                run_id,
-                jobs_found=count + (previous.get("jobs_found", 0) if append else 0),
-            ),
-            on_error=scrape_failure,
-            on_status=lambda message: runs.update_run(run_id, message=message),
-            should_cancel=lambda: runs.stopped(run_id),
-            # An explicit repeat search asks for newly available postings now.
-            force_refresh=append,
-            search_filters={
-                key: options.get(key, default)
-                for key, default in (
-                    ("exclusions", []),
-                    ("work_type", "any"),
-                    ("seniority", "auto"),
-                )
-            },
-        )
+        # Record what ingestion drops, with reasons, for evaluation review.
+        ingestion = ingestion_log.IngestionLog()
+        with ingestion_log.recording(ingestion):
+            jobs = collection.fetch_job_vacancies(
+                options["queries"],
+                options["locations"],
+                options["platforms"],
+                adaptive=True,
+                seen_postings=seen_postings if append else None,
+                remote=options["remote"],
+                posted_days_old=options["posted_days_old"],
+                on_progress=lambda count: runs.update_run(
+                    run_id,
+                    jobs_found=count + (previous.get("jobs_found", 0) if append else 0),
+                ),
+                on_error=scrape_failure,
+                on_status=lambda message: runs.update_run(run_id, message=message),
+                should_cancel=lambda: runs.stopped(run_id),
+                # An explicit repeat search asks for newly available postings now.
+                force_refresh=append,
+                search_filters={
+                    key: options.get(key, default)
+                    for key, default in (
+                        ("exclusions", []),
+                        ("work_type", "any"),
+                        ("seniority", "auto"),
+                    )
+                },
+            )
         runs.check_running(run_id)
         exclusions = [
             value.lower() for value in options.get("exclusions", []) if value.strip()
         ]
-        jobs = [
-            job
-            for job in jobs
-            if not any(
+        from backend.search.filters import work_arrangement, matches_seniority
+
+        work_type = options.get("work_type", "any")
+        seniority = options.get("seniority", "auto")
+
+        def eligible(job):
+            reason = ""
+            if any(
                 value
                 in (
                     str(job.get("title", "")) + " " + str(job.get("company", ""))
                 ).lower()
                 for value in exclusions
-            )
-        ]
-        from backend.search.filters import work_arrangement, matches_seniority
+            ):
+                reason = "excluded term"
+            elif work_type != "any" and work_arrangement(job) != work_type:
+                reason = "work arrangement does not match"
+            elif seniority not in {"auto", "any"} and not matches_seniority(
+                job.get("title", ""), seniority
+            ):
+                reason = "seniority does not match"
+            if reason:
+                ingestion.drop(job, "filter", reason)
+            return not reason
 
-        work_type = options.get("work_type", "any")
-        if work_type != "any":
-            jobs = [job for job in jobs if work_arrangement(job) == work_type]
-        seniority = options.get("seniority", "auto")
-        if seniority not in {"auto", "any"}:
-            jobs = [
-                job
-                for job in jobs
-                if matches_seniority(job.get("title", ""), seniority)
-            ]
+        jobs = [job for job in jobs if eligible(job)]
         if append:
-            jobs = unseen_postings(jobs, seen_postings)
+            unseen = unseen_postings(jobs, seen_postings)
+            with ingestion_log.recording(ingestion):
+                ingestion_log.record_duplicates(
+                    jobs, unseen, known=seen_postings, workspace=seen_postings
+                )
+            jobs = unseen
+        ingestion_log.save(
+            run_dir,
+            ingestion,
+            kept=len(jobs),
+            search=dict(
+                queries=list(options["queries"]),
+                locations=list(options["locations"]),
+                platforms=list(options["platforms"]),
+                append=append,
+            ),
+        )
         # A duplicate-only search completes without clearing the earlier result snapshot.
         if append and not jobs:
             runs.update_run(

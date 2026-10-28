@@ -31,6 +31,8 @@ class JobReview(StrictModel):
     fit: Literal["strong_match", "review", "not_suitable"] | None = None
     # AI-suggested judgments are kept for reference but excluded from human metrics.
     ai_assisted: StrictBool = False
+    # For a posting merged as a duplicate: is it the same job as the one kept?
+    duplicate_correct: StrictBool | None = None
     notes: str = Field(default="", max_length=5000)
     extraction_complete: StrictBool = False
     criteria: dict[str, CriterionReview] = Field(default_factory=dict, max_length=500)
@@ -94,6 +96,45 @@ class ReviewJob(BaseModel):
     app_verdict: str | None = None
 
 
+class DuplicateOf(BaseModel):
+    title: str
+    company: str
+    url: str
+    board: str
+    description: str
+    method: str
+
+
+class DroppedJob(BaseModel):
+    id: str
+    title: str
+    company: str
+    location: str
+    url: str
+    board: str
+    stage: str
+    reason: str
+    description: str
+    duplicate_of: DuplicateOf | None = None
+
+
+class IngestionCount(BaseModel):
+    stage: str
+    reason: str
+    board: str
+    count: int
+
+
+class IngestionRecord(BaseModel):
+    searches: int
+    # False when a search used the collection cache or predates recording.
+    complete: bool
+    collected: dict[str, int]
+    kept: int
+    counts: list[IngestionCount]
+    omitted: int
+
+
 class ReviewDataset(BaseModel):
     id: str
     created_at: float
@@ -107,6 +148,9 @@ class ReviewDataset(BaseModel):
     jobs: list[ReviewJob]
     # Set when verdicts were added from the source workspace after snapshot creation.
     verdicts_added_at: float | None = None
+    # Postings dropped before ranking; absent in snapshots of unrecorded searches.
+    ingestion: IngestionRecord | None = None
+    dropped_jobs: list[DroppedJob] = Field(default_factory=list)
 
 
 class ReviewState(BaseModel):
@@ -185,6 +229,7 @@ class MissedJob(BaseModel):
 
 class StageFunnel(BaseModel):
     good_fits: int
+    lost_at_ingestion: int
     lost_at_retrieval: int
     not_assessed: int
     rejected_at_generation: int
@@ -192,9 +237,62 @@ class StageFunnel(BaseModel):
     recommended: int
 
 
+class ReasonCount(BaseModel):
+    stage: str
+    reason: str
+    count: int
+    labeled: int
+    good_fits: int
+
+
+class BoardCount(BaseModel):
+    board: str
+    collected: int
+    dropped: int
+
+
+class DuplicateMetrics(BaseModel):
+    recorded: int
+    judged: int
+    same: int
+    precision: float | None
+
+
+class SearchTextJob(BaseModel):
+    id: str
+    title: str
+    kept: int
+    total: int
+
+
+class SearchTextMetrics(BaseModel):
+    jobs_checked: int
+    quotes: int
+    kept: int
+    rate: float | None
+    lowest: list[SearchTextJob]
+
+
+class IngestionMetrics(BaseModel):
+    available: bool
+    complete: bool
+    searches: int
+    collected: int
+    kept: int
+    omitted: int
+    by_reason: list[ReasonCount]
+    by_board: list[BoardCount]
+    dropped_recorded: int
+    labeled: int
+    good_fits: int
+    duplicates: DuplicateMetrics
+    search_text: SearchTextMetrics
+
+
 class StageMetrics(BaseModel):
     verdicts_available: bool
     funnel: StageFunnel
+    ingestion: IngestionMetrics
     retrieval_missed: list[MissedJob]
     generation: dict[str, GenerationMetrics]
     app: GenerationMetrics | None

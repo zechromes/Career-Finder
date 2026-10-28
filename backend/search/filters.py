@@ -65,15 +65,22 @@ def matches_seniority(title, requested):
     return requested in levels and not (requested != "senior" and "senior" in levels)
 
 
-def matches_search_filters(job, filters):
+def filter_reason(job, filters):
+    """Name the first explicit search filter a posting fails, or return ""."""
     if any(
         term.strip().casefold()
         in (str(job.get("title", "")) + " " + str(job.get("company", ""))).casefold()
         for term in filters.get("exclusions", [])
         if term.strip()
     ):
-        return False
+        return "excluded term"
     work_type = filters.get("work_type", "any")
     if work_type != "any" and work_arrangement(job) != work_type:
-        return False
-    return matches_seniority(job.get("title", ""), filters.get("seniority", "auto"))
+        return "work arrangement does not match"
+    if not matches_seniority(job.get("title", ""), filters.get("seniority", "auto")):
+        return "seniority does not match"
+    return ""
+
+
+def matches_search_filters(job, filters):
+    return not filter_reason(job, filters)

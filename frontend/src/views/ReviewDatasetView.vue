@@ -21,13 +21,16 @@ const busy = ref(false)
 const revealed = ref(false)
 const reviewStep = ref<'requirements' | 'evidence'>('requirements')
 // Keep the review mode in the URL so refreshes and shared links reopen it.
-const mode = ref<'quick' | 'detailed'>(route.query.mode === 'detailed' ? 'detailed' : 'quick')
+type Mode = 'quick' | 'dropped' | 'detailed'
+const mode = ref<Mode>(
+  route.query.mode === 'detailed' || route.query.mode === 'dropped' ? route.query.mode : 'quick',
+)
 const job = computed(() => bundle.value?.dataset.jobs[index.value])
-function setMode(next: 'quick' | 'detailed') {
+function setMode(next: Mode) {
   if (next === mode.value) return
   if (dirty.value && !window.confirm('Discard unsaved review changes?')) return
   mode.value = next
-  void router.replace({ query: next === 'detailed' ? { mode: next } : {} })
+  void router.replace({ query: next === 'quick' ? {} : { mode: next } })
   if (next === 'detailed') loadDraft()
 }
 async function quickSaved(labels: S['ReviewState']) {
@@ -159,6 +162,15 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
           Quick labeling (recommended)
         </button>
         <button
+          v-if="bundle.dataset.dropped_jobs?.length"
+          type="button"
+          class="btn-secondary"
+          :aria-pressed="mode === 'dropped'"
+          @click="setMode('dropped')"
+        >
+          Label dropped jobs
+        </button>
+        <button
           type="button"
           class="btn-secondary"
           :aria-pressed="mode === 'detailed'"
@@ -167,8 +179,22 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
           Detailed review
         </button>
       </div>
-      <StageResults v-if="metrics" :metrics="metrics" :bundle="bundle" />
-      <QuickLabel v-if="mode === 'quick'" :dataset-id="id" :bundle="bundle" @saved="quickSaved" />
+      <StageResults
+        v-if="metrics"
+        :metrics="metrics"
+        :bundle="bundle"
+        :dataset-id="id"
+        @saved="quickSaved"
+        @label-dropped="setMode('dropped')"
+      />
+      <QuickLabel
+        v-if="mode !== 'detailed'"
+        :key="mode"
+        :dataset-id="id"
+        :bundle="bundle"
+        :dropped="mode === 'dropped'"
+        @saved="quickSaved"
+      />
       <template v-else>
         <section
           aria-label="How to review"

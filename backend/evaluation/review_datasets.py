@@ -104,6 +104,47 @@ def _verdicts(assessments):
     }
 
 
+def _ingestion(source_id, docs):
+    """Combine the workspace's recorded searches; drops later found in the pool are not losses."""
+    from backend.search import ingestion_log
+    from backend.search.collection import _job_key
+
+    record = ingestion_log.load(runs.RUNS_DIR / source_id)
+    if not record or not record.get("searches"):
+        return {}
+    searches = record["searches"]
+    pool = {_job_key(doc.metadata) for doc in docs.values()}
+    collected, counts, dropped, seen = {}, {}, [], set()
+    for search in searches:
+        for board, count in search.get("collected", {}).items():
+            collected[board] = collected.get(board, 0) + count
+        for row in search.get("counts", []):
+            key = (row["stage"], row["reason"], row["board"])
+            counts[key] = counts.get(key, 0) + row["count"]
+        for job in search.get("dropped", []):
+            if job["id"] in seen or _job_key(job) in pool:
+                continue
+            seen.add(job["id"])
+            dropped.append(job)
+    kept = sum(search.get("kept", 0) for search in searches)
+    return dict(
+        ingestion=dict(
+            searches=len(searches),
+            # Pool jobs beyond the recorded kept counts came from unrecorded searches.
+            complete=not any(search.get("cached") for search in searches)
+            and kept >= len(docs),
+            collected=collected,
+            kept=kept,
+            counts=[
+                dict(stage=stage, reason=reason, board=board, count=count)
+                for (stage, reason, board), count in sorted(counts.items())
+            ],
+            omitted=sum(search.get("omitted", 0) for search in searches),
+        ),
+        dropped_jobs=dropped,
+    )
+
+
 def create(source_id):
     from backend.cli import profile_to_context
     from backend.schemas.resume import ResumeProfile
@@ -229,6 +270,7 @@ def create(source_id):
         profile_text=resume_text,
         target_roles=roles,
         jobs=jobs,
+        **_ingestion(source_id, docs),
     )
     with LOCK:
         path = _path(dataset.id)
@@ -245,16 +287,29 @@ def save(identifier, job_id, body):
             raise HTTPException(
                 409, "Reviews changed in another tab. Reload before saving."
             )
-        job = next((job for job in bundle.dataset.jobs if job.id == job_id), None)
+        job = next(
+            (
+                job
+                for job in bundle.dataset.jobs + bundle.dataset.dropped_jobs
+                if job.id == job_id
+            ),
+            None,
+        )
         if not job:
             raise HTTPException(404, "Job not in this dataset.")
         if not body.reviewer.strip():
             raise HTTPException(422, "Enter a reviewer name or initials.")
         review = body.review
-        if set(review.criteria) - {row.id for row in job.criteria} or set(
+        # Dropped postings were never assessed, so they have no criteria or evidence.
+        criteria = getattr(job, "criteria", [])
+        if set(review.criteria) - {row.id for row in criteria} or set(
             review.evidence
-        ) - {row.id for row in job.evidence}:
+        ) - {row.id for row in getattr(job, "evidence", [])}:
             raise HTTPException(422, "Review refers to unknown criteria or evidence.")
+        if review.duplicate_correct is not None and not getattr(
+            job, "duplicate_of", None
+        ):
+            raise HTTPException(422, "Only merged duplicates can be checked as duplicates.")
         for item in review.missing_requirements:
             if not item.requirement.strip() or not quoted(
                 item.job_quote, job.description
@@ -262,7 +317,7 @@ def save(identifier, job_id, body):
                 raise HTTPException(
                     422, "Every added requirement needs an exact posting quote."
                 )
-        shared_rows = [row for row in job.criteria if row.origin == "shared_extractor"]
+        shared_rows = [row for row in criteria if row.origin == "shared_extractor"]
         if review.extraction_complete and (
             not shared_rows
             or any(
@@ -385,6 +440,100 @@ def _generation(model, pairs):
     )
 
 
+def _search_text(data):
+    """Reference-free check: do requirement quotes survive search-text cleaning?"""
+    from backend.search.embedding_text import job_embedding_text
+
+    rows, quotes, kept = [], 0, 0
+    for job in data.jobs:
+        text = job_embedding_text({"title": job.title, "description": job.description})
+        # Only quotes found in the posting itself can be lost by cleaning.
+        found = {
+            row.job_quote
+            for row in job.criteria
+            if row.job_quote and quoted(row.job_quote, job.description)
+        }
+        if not found:
+            continue
+        survived = sum(quoted(quote, text) for quote in found)
+        quotes, kept = quotes + len(found), kept + survived
+        rows.append(dict(id=job.id, title=job.title, kept=survived, total=len(found)))
+    rows.sort(key=lambda row: (row["kept"] / row["total"], row["title"]))
+    return dict(
+        jobs_checked=len(rows),
+        quotes=quotes,
+        kept=kept,
+        rate=kept / quotes if quotes else None,
+        lowest=[row for row in rows if row["kept"] < row["total"]][:10],
+    )
+
+
+def _ingestion_metrics(data, labels):
+    """Drop counts by reason, human fit labels on dropped postings and duplicate checks."""
+    from backend.search.ingestion_log import LOSS_STAGES
+
+    record = data.ingestion
+    dropped = data.dropped_jobs
+    reasons = {}
+    for row in record.counts if record else []:
+        if row.reason == "already in this workspace":
+            continue
+        entry = reasons.setdefault(
+            (row.stage, row.reason),
+            dict(stage=row.stage, reason=row.reason, count=0, labeled=0, good_fits=0),
+        )
+        entry["count"] += row.count
+    good_fits = labeled = 0
+    for job in dropped:
+        review = labels.get(job.id)
+        if job.stage not in LOSS_STAGES or not review:
+            continue
+        if review.fit not in {"strong_match", "not_suitable"}:
+            continue
+        labeled += 1
+        good_fits += review.fit == "strong_match"
+        entry = reasons.get((job.stage, job.reason))
+        if entry:
+            entry["labeled"] += 1
+            entry["good_fits"] += review.fit == "strong_match"
+    boards = {}
+    for board, count in (record.collected if record else {}).items():
+        boards.setdefault(board, dict(board=board, collected=0, dropped=0))[
+            "collected"
+        ] += count
+    for row in record.counts if record else []:
+        if row.reason != "already in this workspace":
+            boards.setdefault(row.board, dict(board=row.board, collected=0, dropped=0))[
+                "dropped"
+            ] += row.count
+    duplicates = [job for job in dropped if job.duplicate_of]
+    judged = [
+        labels[job.id].duplicate_correct
+        for job in duplicates
+        if job.id in labels and labels[job.id].duplicate_correct is not None
+    ]
+    return dict(
+        available=record is not None,
+        complete=bool(record and record.complete),
+        searches=record.searches if record else 0,
+        collected=sum(record.collected.values()) if record else 0,
+        kept=record.kept if record else 0,
+        omitted=record.omitted if record else 0,
+        by_reason=sorted(reasons.values(), key=lambda row: -row["count"]),
+        by_board=sorted(boards.values(), key=lambda row: row["board"]),
+        dropped_recorded=sum(job.stage in LOSS_STAGES for job in dropped),
+        labeled=labeled,
+        good_fits=good_fits,
+        duplicates=dict(
+            recorded=len(duplicates),
+            judged=len(judged),
+            same=sum(judged),
+            precision=sum(judged) / len(judged) if judged else None,
+        ),
+        search_text=_search_text(data),
+    )
+
+
 def _stages(data, labels):
     """Trace each human good fit through retrieval and generation."""
     from backend.evaluation.candidate_fit import title_exceeds_candidate_level
@@ -398,6 +547,7 @@ def _stages(data, labels):
     }
     good = [job for job, fit in binary.values() if fit == "strong_match"]
     shortlisted = [job for job in good if job.previously_shortlisted]
+    ingestion = _ingestion_metrics(data, labels)
     outcome = lambda verdict: sum(job.app_verdict == verdict for job in shortlisted)
     providers = sorted({p for job, _ in binary.values() for p in job.model_verdicts})
     generation = {}
@@ -419,7 +569,8 @@ def _stages(data, labels):
     return dict(
         verdicts_available=any(job.app_verdict for job in data.jobs),
         funnel=dict(
-            good_fits=len(good),
+            good_fits=len(good) + ingestion["good_fits"],
+            lost_at_ingestion=ingestion["good_fits"],
             lost_at_retrieval=len(good) - len(shortlisted),
             not_assessed=sum(job.app_verdict is None for job in shortlisted),
             rejected_at_generation=outcome("not_suitable"),
@@ -437,6 +588,7 @@ def _stages(data, labels):
             for job in good
             if not job.previously_shortlisted
         ],
+        ingestion=ingestion,
         generation=generation,
         app=_generation("Combined app verdict", app_pairs) if app_pairs else None,
     )
@@ -451,10 +603,12 @@ def measure(identifier):
         for key, review in bundle.labels.jobs.items()
         if not review.ai_assisted
     }
+    pool = {job.id for job in data.jobs}
+    # Retrieval is measured on the indexed pool; dropped postings belong to ingestion.
     fit = {
         key: review.fit == "strong_match"
         for key, review in labels.items()
-        if review.fit in {"strong_match", "not_suitable"}
+        if key in pool and review.fit in {"strong_match", "not_suitable"}
     }
     shortlist = [job.id for job in data.jobs if job.previously_shortlisted]
     retrieval = experiments.metrics(fit, [job.id for job in data.jobs], shortlist)
@@ -527,7 +681,11 @@ def measure(identifier):
         revision=bundle.labels.revision,
         split=data.split,
         pool_size=len(data.jobs),
-        fit_reviewed=sum(review.fit is not None for review in labels.values()),
+        fit_reviewed=sum(
+            review.fit is not None
+            for key, review in labels.items()
+            if key in pool
+        ),
         ai_assisted_reviews=len(bundle.labels.jobs) - len(labels),
         retrieval=retrieval,
         extraction=dict(
@@ -550,6 +708,7 @@ def measure(identifier):
             "Quote presence does not prove semantic support.",
             "AI-assisted reviews are excluded from every metric.",
             "Generation metrics cover only shortlisted jobs, which were the only ones assessed.",
-            "Ingestion losses are not tracked yet.",
+            "Ingestion counts cover only recorded searches; dropped-job labels are a sample.",
+            "The search-text check is reference-free: it shows lost quotes, not lost relevance.",
         ],
     )

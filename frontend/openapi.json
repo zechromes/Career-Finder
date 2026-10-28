@@ -1484,6 +1484,29 @@
   },
   "components": {
     "schemas": {
+      "BoardCount": {
+        "properties": {
+          "board": {
+            "type": "string",
+            "title": "Board"
+          },
+          "collected": {
+            "type": "integer",
+            "title": "Collected"
+          },
+          "dropped": {
+            "type": "integer",
+            "title": "Dropped"
+          }
+        },
+        "type": "object",
+        "required": [
+          "board",
+          "collected",
+          "dropped"
+        ],
+        "title": "BoardCount"
+      },
       "Body_start_job_search": {
         "properties": {
           "queries": {
@@ -1758,6 +1781,142 @@
           "reason"
         ],
         "title": "DismissalPreference"
+      },
+      "DroppedJob": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "company": {
+            "type": "string",
+            "title": "Company"
+          },
+          "location": {
+            "type": "string",
+            "title": "Location"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "board": {
+            "type": "string",
+            "title": "Board"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "duplicate_of": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DuplicateOf"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "company",
+          "location",
+          "url",
+          "board",
+          "stage",
+          "reason",
+          "description"
+        ],
+        "title": "DroppedJob"
+      },
+      "DuplicateMetrics": {
+        "properties": {
+          "recorded": {
+            "type": "integer",
+            "title": "Recorded"
+          },
+          "judged": {
+            "type": "integer",
+            "title": "Judged"
+          },
+          "same": {
+            "type": "integer",
+            "title": "Same"
+          },
+          "precision": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precision"
+          }
+        },
+        "type": "object",
+        "required": [
+          "recorded",
+          "judged",
+          "same",
+          "precision"
+        ],
+        "title": "DuplicateMetrics"
+      },
+      "DuplicateOf": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "company": {
+            "type": "string",
+            "title": "Company"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "board": {
+            "type": "string",
+            "title": "Board"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "method": {
+            "type": "string",
+            "title": "Method"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "company",
+          "url",
+          "board",
+          "description",
+          "method"
+        ],
+        "title": "DuplicateOf"
       },
       "EvaluationError": {
         "properties": {
@@ -2466,6 +2625,155 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "IngestionCount": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "board": {
+            "type": "string",
+            "title": "Board"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage",
+          "reason",
+          "board",
+          "count"
+        ],
+        "title": "IngestionCount"
+      },
+      "IngestionMetrics": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "complete": {
+            "type": "boolean",
+            "title": "Complete"
+          },
+          "searches": {
+            "type": "integer",
+            "title": "Searches"
+          },
+          "collected": {
+            "type": "integer",
+            "title": "Collected"
+          },
+          "kept": {
+            "type": "integer",
+            "title": "Kept"
+          },
+          "omitted": {
+            "type": "integer",
+            "title": "Omitted"
+          },
+          "by_reason": {
+            "items": {
+              "$ref": "#/components/schemas/ReasonCount"
+            },
+            "type": "array",
+            "title": "By Reason"
+          },
+          "by_board": {
+            "items": {
+              "$ref": "#/components/schemas/BoardCount"
+            },
+            "type": "array",
+            "title": "By Board"
+          },
+          "dropped_recorded": {
+            "type": "integer",
+            "title": "Dropped Recorded"
+          },
+          "labeled": {
+            "type": "integer",
+            "title": "Labeled"
+          },
+          "good_fits": {
+            "type": "integer",
+            "title": "Good Fits"
+          },
+          "duplicates": {
+            "$ref": "#/components/schemas/DuplicateMetrics"
+          },
+          "search_text": {
+            "$ref": "#/components/schemas/SearchTextMetrics"
+          }
+        },
+        "type": "object",
+        "required": [
+          "available",
+          "complete",
+          "searches",
+          "collected",
+          "kept",
+          "omitted",
+          "by_reason",
+          "by_board",
+          "dropped_recorded",
+          "labeled",
+          "good_fits",
+          "duplicates",
+          "search_text"
+        ],
+        "title": "IngestionMetrics"
+      },
+      "IngestionRecord": {
+        "properties": {
+          "searches": {
+            "type": "integer",
+            "title": "Searches"
+          },
+          "complete": {
+            "type": "boolean",
+            "title": "Complete"
+          },
+          "collected": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Collected"
+          },
+          "kept": {
+            "type": "integer",
+            "title": "Kept"
+          },
+          "counts": {
+            "items": {
+              "$ref": "#/components/schemas/IngestionCount"
+            },
+            "type": "array",
+            "title": "Counts"
+          },
+          "omitted": {
+            "type": "integer",
+            "title": "Omitted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "searches",
+          "complete",
+          "collected",
+          "kept",
+          "counts",
+          "omitted"
+        ],
+        "title": "IngestionRecord"
+      },
       "JobActionUpdate": {
         "properties": {
           "key": {
@@ -2806,6 +3114,17 @@
             "type": "boolean",
             "title": "Ai Assisted",
             "default": false
+          },
+          "duplicate_correct": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicate Correct"
           },
           "notes": {
             "type": "string",
@@ -3203,6 +3522,39 @@
         ],
         "title": "ProfileConfirmation"
       },
+      "ReasonCount": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "labeled": {
+            "type": "integer",
+            "title": "Labeled"
+          },
+          "good_fits": {
+            "type": "integer",
+            "title": "Good Fits"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage",
+          "reason",
+          "count",
+          "labeled",
+          "good_fits"
+        ],
+        "title": "ReasonCount"
+      },
       "ResumeProfile": {
         "properties": {
           "name": {
@@ -3467,6 +3819,23 @@
               }
             ],
             "title": "Verdicts Added At"
+          },
+          "ingestion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IngestionRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dropped_jobs": {
+            "items": {
+              "$ref": "#/components/schemas/DroppedJob"
+            },
+            "type": "array",
+            "title": "Dropped Jobs"
           }
         },
         "type": "object",
@@ -4119,11 +4488,86 @@
         ],
         "title": "SavedProfileInput"
       },
+      "SearchTextJob": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "kept": {
+            "type": "integer",
+            "title": "Kept"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "kept",
+          "total"
+        ],
+        "title": "SearchTextJob"
+      },
+      "SearchTextMetrics": {
+        "properties": {
+          "jobs_checked": {
+            "type": "integer",
+            "title": "Jobs Checked"
+          },
+          "quotes": {
+            "type": "integer",
+            "title": "Quotes"
+          },
+          "kept": {
+            "type": "integer",
+            "title": "Kept"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate"
+          },
+          "lowest": {
+            "items": {
+              "$ref": "#/components/schemas/SearchTextJob"
+            },
+            "type": "array",
+            "title": "Lowest"
+          }
+        },
+        "type": "object",
+        "required": [
+          "jobs_checked",
+          "quotes",
+          "kept",
+          "rate",
+          "lowest"
+        ],
+        "title": "SearchTextMetrics"
+      },
       "StageFunnel": {
         "properties": {
           "good_fits": {
             "type": "integer",
             "title": "Good Fits"
+          },
+          "lost_at_ingestion": {
+            "type": "integer",
+            "title": "Lost At Ingestion"
           },
           "lost_at_retrieval": {
             "type": "integer",
@@ -4149,6 +4593,7 @@
         "type": "object",
         "required": [
           "good_fits",
+          "lost_at_ingestion",
           "lost_at_retrieval",
           "not_assessed",
           "rejected_at_generation",
@@ -4165,6 +4610,9 @@
           },
           "funnel": {
             "$ref": "#/components/schemas/StageFunnel"
+          },
+          "ingestion": {
+            "$ref": "#/components/schemas/IngestionMetrics"
           },
           "retrieval_missed": {
             "items": {
@@ -4195,6 +4643,7 @@
         "required": [
           "verdicts_available",
           "funnel",
+          "ingestion",
           "retrieval_missed",
           "generation",
           "app"

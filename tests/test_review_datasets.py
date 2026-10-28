@@ -234,6 +234,7 @@ class ReviewDatasetTests(unittest.TestCase):
             stages["funnel"],
             dict(
                 good_fits=2,
+                lost_at_ingestion=0,
                 lost_at_retrieval=1,
                 not_assessed=0,
                 rejected_at_generation=0,
@@ -293,6 +294,78 @@ class ReviewDatasetTests(unittest.TestCase):
             service.add_verdicts(self.id)
         self.assertEqual(refused.exception.status_code, 422)
         self.assertEqual(path.read_bytes(), before)
+
+    def ingestion_dataset(self):
+        runs_dir = Path(self.temp.name) / "runs"
+        (runs_dir / self.source).mkdir(parents=True)
+        drop = lambda i, **extra: dict(
+            id=f"dropped-{i}",
+            title=f"Analyst {i}",
+            company="Example",
+            location="Sydney",
+            url=f"https://example.test/dropped/{i}",
+            board="linkedin",
+            description="Python and SQL analysis.",
+            **extra,
+        )
+        record = dict(
+            searches=[
+                dict(
+                    cached=False,
+                    collected={"linkedin": 9},
+                    kept=2,
+                    omitted=0,
+                    counts=[
+                        dict(stage="filter", reason="location does not match", board="linkedin", count=4),
+                        dict(stage="deduplicate", reason="duplicate posting", board="linkedin", count=1),
+                        dict(stage="deduplicate", reason="already in this workspace", board="linkedin", count=3),
+                    ],
+                    dropped=[
+                        drop(1, stage="filter", reason="location does not match"),
+                        drop(
+                            2,
+                            stage="deduplicate",
+                            reason="duplicate posting",
+                            duplicate_of=dict(
+                                title="Developer", company="Example", url="https://example.test/1",
+                                board="indeed", description="Python required.", method="same link",
+                            ),
+                        ),
+                        # Later found in the pool, so not an ingestion loss.
+                        dict(drop(3, stage="budget", reason="over the candidate limit"),
+                             url="https://example.test/2", title="Designer"),
+                    ],
+                )
+            ]
+        )
+        (runs_dir / self.source / "ingestion.json").write_text(json.dumps(record))
+        with patch.object(runs, "RUNS_DIR", runs_dir):
+            return service.create(self.source).dataset
+
+    def test_snapshot_includes_dropped_postings_and_ingestion_metrics(self):
+        data = self.ingestion_dataset()
+        self.assertEqual([job.id for job in data.dropped_jobs], ["dropped-1", "dropped-2"])
+        self.assertTrue(data.ingestion.complete)
+        save = lambda revision, job_id, review: self.client.put(
+            f"/api/review-datasets/{data.id}/jobs/{job_id}",
+            json=dict(revision=revision, reviewer="A", review=review),
+        )
+        self.assertEqual(save(0, "dropped-1", dict(fit="strong_match")).status_code, 200)
+        self.assertEqual(save(1, "dropped-2", dict(duplicate_correct=True)).status_code, 200)
+        self.assertEqual(save(2, "job1", dict(duplicate_correct=True)).status_code, 422)
+        report = self.client.get(f"/api/review-datasets/{data.id}/metrics").json()
+        ingestion = report["stages"]["ingestion"]
+        self.assertEqual((ingestion["collected"], ingestion["kept"]), (9, 2))
+        self.assertEqual((ingestion["labeled"], ingestion["good_fits"]), (1, 1))
+        location = next(r for r in ingestion["by_reason"] if r["reason"] == "location does not match")
+        self.assertEqual((location["count"], location["good_fits"]), (4, 1))
+        self.assertNotIn("already in this workspace", {r["reason"] for r in ingestion["by_reason"]})
+        self.assertEqual(ingestion["duplicates"], dict(recorded=1, judged=1, same=1, precision=1))
+        self.assertEqual(ingestion["search_text"]["rate"], 1)
+        self.assertEqual(report["stages"]["funnel"]["lost_at_ingestion"], 1)
+        # Dropped labels never enter pool retrieval metrics.
+        self.assertEqual(report["retrieval"]["label_coverage"], 0)
+        self.assertEqual(report["fit_reviewed"], 0)
 
     def test_unknown_keys_bad_quotes_and_incomplete_reviews_rejected(self):
         for review in [

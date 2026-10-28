@@ -1,6 +1,7 @@
 """Bounded staged collection; yield is coverage, never a prediction of job fit."""
 
 from backend.observability import stage, collection_batch, collection_step, mark
+from backend.search import ingestion_log
 from dataclasses import dataclass
 import math
 import os
@@ -116,13 +117,19 @@ def collect(
             return
         hydrated = hydrate(rows, budget)
         with collection_step("filter_descriptions") as trace:
-            accepted = [
-                job for job in hydrated if job.get("description") and final(job)
-            ]
+            accepted = []
+            for job in hydrated:
+                if not job.get("description"):
+                    ingestion_log.drop(job, "description", "no usable description")
+                elif final(job):
+                    accepted.append(job)
             if trace is not None:
                 trace["result_count"] = len(accepted)
         with collection_step("merge_unique_results") as trace:
-            results = unique(results + accepted, [])[: config["candidates"]]
+            merged = unique(results + accepted, [])
+            for job in merged[config["candidates"] :]:
+                ingestion_log.drop(job, "budget", "over the candidate limit")
+            results = merged[: config["candidates"]]
             if trace is not None:
                 trace["result_count"] = len(results)
         if on_progress:
@@ -179,6 +186,7 @@ def collect(
                 continue
             stream.last_page = signature
             raw_count = len(rows)
+            ingestion_log.collected(stream.board, raw_count)
             stream.raw += raw_count
             stream.offset += stream.size
             if raw_count < stream.size:
@@ -229,6 +237,8 @@ def collect(
         deferred_round += 1
     if budget.cancelled():
         return []
+    for job in pending:
+        ingestion_log.drop(job, "budget", "not processed before the collection limit")
     coverage = sum(stream.calls > 0 for stream in streams)
     reason = (
         "time budget reached"
