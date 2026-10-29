@@ -1,6 +1,6 @@
 # Career Tracker: workflow and technical guide
 
-Verified against the repository code on **26 October 2026**.
+Verified against the repository code on **29 October 2026**.
 
 This guide explains the web application's main workflow, the components behind
 it, the data they exchange, and the decisions that affect the result. The CLI has
@@ -14,6 +14,7 @@ Quick navigation:
 - [Collection](#5-collect-jobs-and-build-an-eligible-pool) and [ranking](#6-index-and-rank-jobs)
 - [Shared requirements](#7-extract-and-freeze-shared-requirements), [providers](#8-assess-with-claude-gpt-and-gemini), and [scoring](#9-validate-evidence-and-compute-the-fit-score)
 - [Failures and retries](#11-failures-retries-and-cancellation), [storage](#12-storage-and-cache-boundaries), and [API routes](#13-main-http-interactions)
+- [Evaluating matching quality](#16-evaluate-matching-quality)
 
 ## 1. Start with the animated flowchart
 
@@ -34,7 +35,7 @@ flowchart TD
     U[Upload PDF] --> P[Local text / OCR and OpenAI profile extraction]
     P --> C[User reviews profile and confirms preferences]
     SP[Reopen saved profile] --> C
-    C --> B[Collect, constrain and deduplicate postings]
+    C --> B[Collect, constrain and deduplicate postings; record drops]
     B --> R[Hybrid retrieval: semantic + BM25]
     R --> S[Shortlist and publish pending rows]
     S --> Q[Load validated requirements or extract with OpenAI]
@@ -130,7 +131,8 @@ an assessment journal can restore missing history without replacing existing row
 
 `top_k` controls the shortlist: it does not set how many jobs each board collects.
 `top_k=0` means all retrieved jobs. Automatic seniority prioritizes compatible titles
-during ranking; explicit seniority selection can filter the collected pool.
+during ranking (see section 6); explicit seniority selection can filter the
+collected pool.
 
 Source: [search/service.py](../backend/search/service.py),
 [profiles/service.py](../backend/profiles/service.py).
@@ -155,13 +157,26 @@ filters and duplicates. Work-arrangement, title/company exclusions and explicit
 seniority constraints can remove jobs before retrieval. Cross-board duplicate
 checks combine identities and description similarity; these remain heuristics.
 
+Each search also records what ingestion drops, for evaluation only. Every posting
+removed by location, posting age, a search filter, a missing description, the
+collection limits or deduplication is counted by stage, reason and board in
+`ingestion.json` in the run folder, with a bounded sample stored for review (up to
+120 filtered, 60 description, 60 limit and 50 duplicate postings; descriptions
+truncated to 6,000 characters). Jobs already in the workspace are counted only.
+Recording observes the existing filters through
+[`ingestion_log.py`](../backend/search/ingestion_log.py) and changes no eligibility
+decision. A search served from the collection cache records no drops and is
+marked incomplete.
+
 A board failure is recorded while other sources can continue. If no jobs remain,
 the flow ends without extraction or evaluation. **Retry scraping** reuses confirmed
 preferences and targets failed sources, retaining existing results. Availability of
 a collected posting is not independently verified.
 
 Source: [collection.py](../backend/search/collection.py),
+[adaptive.py](../backend/search/adaptive.py),
 [filters.py](../backend/search/filters.py),
+[ingestion_log.py](../backend/search/ingestion_log.py),
 [provider guide](job-search-providers.md).
 
 ## 6. Index and rank jobs
@@ -191,9 +206,20 @@ Automatic early-career title prioritization remains primary. This is owner-scope
 preference ordering, not provider training; see [dismissal preferences](dismissal-preferences.md).
 
 The resulting ranking is a way to choose what to assess. It is not the final fit
-score or a hiring probability. Automatic seniority can prioritize appropriate
-unmarked/early-career titles before top-K selection. Other eligible levels can
-remain in the pool.
+score or a hiring probability. For an early-career profile (graduate, entry or
+junior level, or two years or fewer of experience), automatic seniority moves
+some experienced-level titles below the others before top-K selection:
+
+- Graduate/entry/junior profiles: any mid-level, intermediate, senior, lead,
+  staff, principal, director, head-of, chief or architect title, unless the title
+  also accepts juniors.
+- Profiles that are early-career only by years (career level mid or unknown):
+  such a title moves down only when the posting states more years of experience
+  than the profile records, or the title is director, head-of or chief.
+
+Stated years count only when phrased as a requirement (for example "5+ years",
+"minimum of 3 years", "3–5 years of experience"), not company age. Moved jobs stay
+in the pool and can fill spare shortlist slots.
 
 The shortlist is published as **pending result rows** before remote assessments
 finish. This is why jobs can appear before their scores do.
@@ -247,7 +273,10 @@ Source: [requirements.py](../backend/evaluation/requirements.py),
 Each provider receives the same frozen criteria plus candidate context, posting
 and selected roles. Each must return exactly one verdict for each requirement ID
 and preserve its canonical fields. It cannot add, drop, split, merge or reclassify
-requirements. Verdicts are `met`, `partial`, `not_met` or `unknown`, with resume
+requirements. Copied fields are compared after Unicode normalization, whitespace
+collapsing and straightening curly quotes and dashes, because a posting can contain
+characters such as non-breaking spaces that a model cannot reproduce. The saved
+verdict always keeps the shared wording exactly; any real rewording is rejected. Verdicts are `met`, `partial`, `not_met` or `unknown`, with resume
 quotes and explanations.
 
 The three provider batches run concurrently. Each advances independently in waves
@@ -285,7 +314,7 @@ Source: [providers.py](../backend/evaluation/providers.py),
 ## 9. Validate evidence and compute the fit score
 
 The backend first checks schema validity, exact shared IDs and unchanged canonical
-fields. It then verifies job and resume quotes against their source text, ignoring
+fields (compared as described in section 8). It then verifies job and resume quotes against their source text, ignoring
 case and whitespace. Missing or invalid evidence becomes **unknown** rather than
 a proven inability. Only criteria with verified job evidence enter the score's
 denominator.
@@ -316,6 +345,10 @@ strong recommendation; the category and experience rules still apply.
 - No usable verified job evidence produces no score.
 - Additional professional-experience and seniority guards can exclude a job or
    require review. A strong result also needs experience alignment to be met.
+   The seniority guard follows the section 6 rule: graduate/entry/junior profiles
+   are excluded from experienced-level titles; other early-career-by-years profiles
+   only when the posting states more years or the title is executive. The evaluator
+   instructions apply the same distinction.
 
 A separate mandatory-years field cannot turn a preferred requirement into a hard
 prerequisite. If `minimum_professional_years` is supplied, its evidence must be
@@ -362,7 +395,7 @@ Source: [orchestration.py](../backend/evaluation/orchestration.py),
 | Invalid PDF or failed classification | No workspace PDF is created | Correct the upload or resolve provider failure |
 | A board fails | Other sources can continue; source error is retained | Retry scraping |
 | Extraction schema or source range is invalid | One correction retry; persistent failure blocks posting assessments | Retry failed evaluations |
-| Shared IDs, fields or mandatory evidence are inconsistent | One correction retry for that assessment | Retry failed provider/job |
+| Shared IDs, fields or mandatory evidence are inconsistent | One correction retry for that assessment; the note names the requirement ID and field | Retry failed provider/job |
 | Provider rate limit | Pacing/backoff and provider policy apply | Retry after quota/cooldown permits |
 | Permanent quota, credentials or model access failure | Affected provider submissions stop/skip under its policy | Fix configuration or quota before retrying |
 | Cancel requested | Later work and late persistence are blocked | Existing completed results remain available |
@@ -398,7 +431,9 @@ earlier.
 | Location | Contents and purpose | Reuse / lifecycle |
 | --- | --- | --- |
 | `frontend/runs/<id>/` | Run snapshots, resume/context, assessment journal, failed-job checkpoints, exports and search-specific artifacts | Existing seven-day run retention; cancellation/deletion respects active workers |
+| `frontend/runs/<id>/ingestion.json` | Per-search drop counts and a bounded sample of dropped postings | Removed with the run; never sent in live search snapshots |
 | `data/profiles/` | Saved profile metadata and separately stored resume/context | Managed separately from temporary run expiry |
+| `data/evaluation_datasets/` | Frozen review snapshots and human labels (private) | Kept until deleted on `/eval`; survive run expiry |
 | Run or saved-profile `evaluations/` | Private structured assessments with candidate evidence | Seven days; bounded to 1,000 entries per owner |
 | `.cache/job_requirements/` | Validated public posting requirements; no candidate context | Seven days; at most 1,000 entries |
 | `.cache/job_collections/` | Collected public postings keyed by search parameters | Default 15 minutes; bounded cache |
@@ -443,6 +478,12 @@ workspace identifier used to read state, follow progress or retry work.
 | `GET/POST /api/profiles` | List/save profiles |
 | `PUT/DELETE /api/profiles/{profile_id}` | Update/delete a saved profile |
 | `POST /api/profiles/{profile_id}/searches` | Reopen linked workspace; `fresh=true` creates a new one without automatically searching |
+| `GET/POST /api/review-datasets` | List review datasets or freeze a workspace into one |
+| `GET/DELETE /api/review-datasets/{id}` | Read a snapshot with its labels, or delete both |
+| `PUT /api/review-datasets/{id}/jobs/{job_id}` | Save a revision-checked human review |
+| `GET /api/review-datasets/{id}/metrics` | Compute metrics and per-stage results from human labels |
+| `GET /api/experiments/options`, `/sources`, `/sources/{id}` | Experiment model choices and source workspaces |
+| `POST /api/experiments`, `GET /api/experiments/{id}`, `POST …/cancel` | Run, poll or cancel a paid model comparison |
 
 FastAPI's `/docs` and the generated OpenAPI file describe the exact request and
 response fields. Python schema models are authoritative; generated frontend types
@@ -475,7 +516,9 @@ categories. It is designed not to export resume or posting text. See
 [tracing setup](langsmith-tracing.md) for the exact configuration and coverage.
 
 For application changes, `./scripts/check.sh` runs Python regressions, contract
-generation, frontend tests, type checking and a production build. Add `--e2e` for
+generation, frontend tests, type checking and a production build. It uses the
+`job-tracker` conda environment when present (or `PYTHON_BIN`) and stops early if
+project dependencies are missing. Add `--e2e` for
 affected browser workflows. Mocked providers verify software behavior, not live
 availability or human matching accuracy.
 
@@ -489,3 +532,36 @@ job descriptions, potentially missed retrieval matches and model interpretation
 errors. Shared extraction makes criteria consistent across providers, but also
 shares any extraction mistake. Human-labeled evaluation remains necessary to
 measure relevance, missed matches and strong-match precision.
+
+## 16. Evaluate matching quality
+
+`/eval` measures whether the app finds and judges jobs well, using the user's own
+labels as the reference (supervised evaluation); the app is not trained on them.
+
+1. **Create a review dataset** from a finished search. It freezes the indexed pool,
+   including jobs outside the shortlist, each provider's saved verdict, and the
+   search's ingestion record with its dropped postings.
+2. **Quick labeling** shows one job at a time in a fixed random order: Good fit,
+   Not sure or Not a fit, saved immediately. About 30 labels give a first result.
+   Shortlist membership is hidden while labeling. **Label dropped jobs** samples
+   postings removed during ingestion. **Detailed review** checks extracted
+   requirements and evidence. Reviews marked AI-assisted are kept but excluded
+   from every metric.
+3. **Results by stage:**
+   - *Ingestion:* drop counts by reason and board, good fits among labeled dropped
+     jobs, a merged-duplicate check, and a label-free check that requirement
+     quotes survive search-text cleaning.
+   - *Retrieval:* shortlist recall and precision on the pool, missed good fits,
+     and an optional paid embedding comparison.
+   - *Generation:* each model's verdict against the labels (agreement on good
+     fits, strong-match accuracy, good fits rejected, failures counted separately).
+   - *Overview:* where each good fit ended up across the three stages.
+
+Results from a small, single-profile sample are rough. Labels used to design a
+change cannot also prove it; confirm changes on fresh labels. See the
+[human evaluation guide](human-evaluation-datasets.md) for metric definitions,
+storage and privacy.
+
+Source: [review_datasets.py](../backend/evaluation/review_datasets.py),
+[ReviewDatasetView.vue](../frontend/src/views/ReviewDatasetView.vue),
+[StageResults.vue](../frontend/src/components/StageResults.vue).
