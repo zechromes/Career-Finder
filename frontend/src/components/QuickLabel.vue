@@ -251,7 +251,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
           :aria-keyshortcuts="choice.key"
           @click="answer(choice.value)"
         >
-          {{ choice.label }} <span class="text-sm opacity-75">({{ choice.key }})</span>
+          {{ choice.label }} <span class="text-sm">({{ choice.key }})</span>
         </button>
       </div>
       <ul class="space-y-1 text-sm">

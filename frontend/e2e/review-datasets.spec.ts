@@ -225,3 +225,18 @@ test('retrieval tab compares embedding models only after confirmation', async ({
   expect(starts).toBe(1)
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
 })
+
+test('label-free results are visible before any labels', async ({ page }) => {
+  await page.goto('/eval')
+  await page.getByRole('link', { name: /Review dataset ·/ }).click()
+  const results = page.getByRole('region', { name: 'Results so far' })
+  await expect(results).toContainText('need no labels')
+  await results.getByRole('button', { name: '1. Ingestion' }).click()
+  await expect(results).toContainText('Collected 6 postings')
+  await expect(results).toContainText('1 of 1 requirement quotes survived')
+  await results.getByRole('button', { name: '3. Generation' }).click()
+  await expect(results).toContainText('GPT: 1 strong match · 0 needs review · 0 not suitable')
+  await expect(results).toContainText('App overall: 0 strong match · 1 needs review')
+  await expect(results.getByRole('table')).toHaveCount(0)
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
+})
