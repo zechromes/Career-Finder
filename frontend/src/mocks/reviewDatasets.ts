@@ -228,6 +228,31 @@ export const reviewDatasetHandlers = [
     sessionStorage.setItem('career-demo-human-reviews', JSON.stringify(labels))
     return HttpResponse.json(labels)
   }),
+  http.post('/api/review-datasets/:id/replay', () => {
+    const rule = (key: string, name: string, recall: number, added: string[]) => ({
+      rule: key,
+      name,
+      shortlist_size: 1,
+      matches_original: key === 'title_only' ? 1 : 0.5,
+      metrics: { label_coverage: 1, observed_recall_at_k: recall, precision_on_labeled: 1 },
+      good_fits_added: added,
+      not_fits_added: [],
+      unassessed_added: added.length,
+    })
+    return HttpResponse.json({
+      dataset_id: id,
+      embedding_model: 'synthetic',
+      ranked_at: 1793100000,
+      searches: 1,
+      top_k: 1,
+      unranked: 0,
+      rules: [
+        rule('title_only', 'Title only (until 28 Oct 2026)', 0.5, []),
+        rule('stated_years', 'Stated years (current)', 1, ['job1']),
+      ],
+      limitations: ['Synthetic replay'],
+    })
+  }),
   http.get('/api/review-datasets/:id/metrics', () => {
     const labels = read()
     const assisted = labels.jobs.job1?.ai_assisted === true

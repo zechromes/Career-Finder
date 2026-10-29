@@ -310,3 +310,27 @@ class ReviewMetrics(BaseModel):
     evidence: dict[str, EvidenceMetrics]
     stages: StageMetrics
     limitations: list[str]
+
+
+class ReplayRule(BaseModel):
+    rule: str
+    name: str
+    shortlist_size: int
+    # Share of the original shortlist this rule reproduces; the title-only rule
+    # should be close to 1 if the replay is faithful.
+    matches_original: float | None
+    metrics: ExperimentMetrics
+    good_fits_added: list[str]
+    not_fits_added: list[str]
+    unassessed_added: int
+
+
+class ReplayResult(BaseModel):
+    dataset_id: str
+    embedding_model: str
+    ranked_at: float
+    searches: int
+    top_k: int
+    unranked: int
+    rules: list[ReplayRule]
+    limitations: list[str]

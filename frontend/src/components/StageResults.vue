@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import DuplicateCheck from './DuplicateCheck.vue'
+import ReplayComparison from './ReplayComparison.vue'
 import RetrievalComparison from './RetrievalComparison.vue'
 import type { components } from '../types/api'
 type S = components['schemas']
@@ -273,6 +274,7 @@ const goodTotal = (value: S['GenerationMetrics']) =>
         Rank positions were not saved, so how high good fits appeared within the shortlist cannot be
         measured.
       </p>
+      <ReplayComparison :dataset-id="datasetId" :bundle="bundle" />
       <RetrievalComparison :bundle="bundle" />
     </div>
 

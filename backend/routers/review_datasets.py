@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 from backend.evaluation import review_datasets as service
+from backend.evaluation import replay as replay_service
 from backend.schemas.review_datasets import (
     CreateReviewDataset,
     ReviewBundle,
@@ -9,6 +10,7 @@ from backend.schemas.review_datasets import (
     SaveReview,
     ReviewState,
     ReviewMetrics,
+    ReplayResult,
 )
 
 router = APIRouter(prefix="/api/review-datasets", tags=["Evaluation datasets"])
@@ -42,3 +44,8 @@ def save_review(identifier: str, job_id: str, body: SaveReview):
 @router.get("/{identifier}/metrics", response_model=ReviewMetrics)
 def metrics(identifier: str):
     return service.measure(identifier)
+
+
+@router.post("/{identifier}/replay", response_model=ReplayResult)
+def replay(identifier: str):
+    return replay_service.replay(identifier)

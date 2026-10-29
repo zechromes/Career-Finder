@@ -594,6 +594,16 @@ def _stages(data, labels):
     )
 
 
+def fit_labels(data, labels):
+    """Binary good-fit labels on the indexed pool; dropped postings belong to ingestion."""
+    pool = {job.id for job in data.jobs}
+    return {
+        key: review.fit == "strong_match"
+        for key, review in labels.items()
+        if key in pool and review.fit in {"strong_match", "not_suitable"}
+    }
+
+
 def measure(identifier):
     """Report only explicitly human-reviewed judgments; unknowns are not negatives."""
     bundle = read(identifier)
@@ -604,12 +614,7 @@ def measure(identifier):
         if not review.ai_assisted
     }
     pool = {job.id for job in data.jobs}
-    # Retrieval is measured on the indexed pool; dropped postings belong to ingestion.
-    fit = {
-        key: review.fit == "strong_match"
-        for key, review in labels.items()
-        if key in pool and review.fit in {"strong_match", "not_suitable"}
-    }
+    fit = fit_labels(data, labels)
     shortlist = [job.id for job in data.jobs if job.previously_shortlisted]
     retrieval = experiments.metrics(fit, [job.id for job in data.jobs], shortlist)
     correct = incorrect = importance_right = importance_total = complete_correct = (

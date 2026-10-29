@@ -252,6 +252,48 @@
         }
       }
     },
+    "/api/review-datasets/{identifier}/replay": {
+      "post": {
+        "tags": [
+          "Evaluation datasets"
+        ],
+        "summary": "Replay",
+        "operationId": "replay_api_review_datasets__identifier__replay_post",
+        "parameters": [
+          {
+            "name": "identifier",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Identifier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/experiments/options": {
       "get": {
         "tags": [
@@ -3554,6 +3596,120 @@
           "good_fits"
         ],
         "title": "ReasonCount"
+      },
+      "ReplayResult": {
+        "properties": {
+          "dataset_id": {
+            "type": "string",
+            "title": "Dataset Id"
+          },
+          "embedding_model": {
+            "type": "string",
+            "title": "Embedding Model"
+          },
+          "ranked_at": {
+            "type": "number",
+            "title": "Ranked At"
+          },
+          "searches": {
+            "type": "integer",
+            "title": "Searches"
+          },
+          "top_k": {
+            "type": "integer",
+            "title": "Top K"
+          },
+          "unranked": {
+            "type": "integer",
+            "title": "Unranked"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/ReplayRule"
+            },
+            "type": "array",
+            "title": "Rules"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Limitations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dataset_id",
+          "embedding_model",
+          "ranked_at",
+          "searches",
+          "top_k",
+          "unranked",
+          "rules",
+          "limitations"
+        ],
+        "title": "ReplayResult"
+      },
+      "ReplayRule": {
+        "properties": {
+          "rule": {
+            "type": "string",
+            "title": "Rule"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "shortlist_size": {
+            "type": "integer",
+            "title": "Shortlist Size"
+          },
+          "matches_original": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matches Original"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/ExperimentMetrics"
+          },
+          "good_fits_added": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Good Fits Added"
+          },
+          "not_fits_added": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Not Fits Added"
+          },
+          "unassessed_added": {
+            "type": "integer",
+            "title": "Unassessed Added"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rule",
+          "name",
+          "shortlist_size",
+          "matches_original",
+          "metrics",
+          "good_fits_added",
+          "not_fits_added",
+          "unassessed_added"
+        ],
+        "title": "ReplayRule"
       },
       "ResumeProfile": {
         "properties": {

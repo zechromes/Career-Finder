@@ -74,6 +74,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/review-datasets/{identifier}/replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replay */
+        post: operations["replay_api_review_datasets__identifier__replay_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/experiments/options": {
         parameters: {
             query?: never;
@@ -1546,6 +1563,43 @@ export interface components {
             /** Good Fits */
             good_fits: number;
         };
+        /** ReplayResult */
+        ReplayResult: {
+            /** Dataset Id */
+            dataset_id: string;
+            /** Embedding Model */
+            embedding_model: string;
+            /** Ranked At */
+            ranked_at: number;
+            /** Searches */
+            searches: number;
+            /** Top K */
+            top_k: number;
+            /** Unranked */
+            unranked: number;
+            /** Rules */
+            rules: components["schemas"]["ReplayRule"][];
+            /** Limitations */
+            limitations: string[];
+        };
+        /** ReplayRule */
+        ReplayRule: {
+            /** Rule */
+            rule: string;
+            /** Name */
+            name: string;
+            /** Shortlist Size */
+            shortlist_size: number;
+            /** Matches Original */
+            matches_original: number | null;
+            metrics: components["schemas"]["ExperimentMetrics"];
+            /** Good Fits Added */
+            good_fits_added: string[];
+            /** Not Fits Added */
+            not_fits_added: string[];
+            /** Unassessed Added */
+            unassessed_added: number;
+        };
         /** ResumeProfile */
         ResumeProfile: {
             /**
@@ -2275,6 +2329,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReviewMetrics"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    replay_api_review_datasets__identifier__replay_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                identifier: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplayResult"];
                 };
             };
             /** @description Validation Error */

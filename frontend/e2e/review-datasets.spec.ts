@@ -240,3 +240,25 @@ test('label-free results are visible before any labels', async ({ page }) => {
   await expect(results.getByRole('table')).toHaveCount(0)
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
 })
+
+test('retrieval replay compares seniority rules on the same labels', async ({ page }) => {
+  let replays = 0
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && request.url().endsWith('/replay')) replays++
+  })
+  await page.goto('/eval')
+  await page.getByRole('link', { name: /Review dataset ·/ }).click()
+  const results = page.getByRole('region', { name: 'Results so far' })
+  await results.getByRole('button', { name: '2. Retrieval' }).click()
+  await expect(results).toContainText('a fraction of a cent')
+  expect(replays).toBe(0)
+  await results.getByRole('button', { name: 'Replay retrieval' }).click()
+  const table = results.getByRole('region', { name: 'Replay results' })
+  await expect(table.getByRole('row', { name: /Stated years \(current\)/ })).toContainText('100%')
+  await expect(table.getByRole('row', { name: /Title only/ })).toContainText('50%')
+  await expect(results).toContainText('Python Developer · your good fit')
+  expect(replays).toBe(1)
+  await page.setViewportSize({ width: 390, height: 844 })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
+})

@@ -54,6 +54,18 @@ def sources():
         ]
 
 
+def posting_id(metadata, original):
+    """Stable posting ID shared by experiments, review datasets and replays."""
+    url = metadata.get("url", "")
+    identity_url = url if url.startswith(("https://", "http://")) else ""
+    return hashlib.sha256(
+        (
+            identity_url
+            or (metadata.get("title", "") + metadata.get("company", "") + original)
+        ).encode()
+    ).hexdigest()[:24]
+
+
 def dataset(source_id):
     """Read original scoped postings without embedding or writing search state."""
     from langchain_core.documents import Document
@@ -124,19 +136,7 @@ def dataset(source_id):
             continue
         doc.page_content = original
         doc.metadata.setdefault("job_description", original)
-        url = doc.metadata.get("url", "")
-        identity_url = url if url.startswith(("https://", "http://")) else ""
-        key = hashlib.sha256(
-            (
-                identity_url
-                or (
-                    doc.metadata.get("title", "")
-                    + doc.metadata.get("company", "")
-                    + original
-                )
-            ).encode()
-        ).hexdigest()[:24]
-        unique[key] = doc
+        unique[posting_id(doc.metadata, original)] = doc
     if not unique:
         raise HTTPException(
             422, "This workspace has no saved posting descriptions to evaluate."

@@ -62,6 +62,18 @@ trained on these labels.
   the source workspace's pool with each OpenAI embedding model and scores the top
   K (up to 20) against your labels; it needs the original search (7 days) and
   isolates the embedding model, without seniority or dismissal adjustments.
+  **Replay with each seniority rule** (`POST /api/review-datasets/{id}/replay`)
+  re-runs the production ranking of each recorded search on its frozen pool, then
+  applies the earlier title-only rule and the current stated-years rule with the
+  original shortlist size, and scores both against the same labels. It reports
+  observed recall, precision on labeled jobs, labeled good fits and not-fits each
+  rule adds, and how much of the original shortlist the rule reproduces (a
+  fidelity check for the title-only rule; dismissals made before the original
+  search are not replayed). The first replay embeds the role and profile queries
+  once with `text-embedding-3-small`, which needs the original search; the
+  relevance order is then saved as `relevance.json` in the dataset folder, and
+  later replays make no provider calls. No assessments run: jobs a rule adds to
+  the shortlist have no model verdict.
 - **3. Generation** compares each model's saved verdict, and the app's combined
   verdict, with your labels on shortlisted jobs: agreement on your good fits
   (strong match / your good fits), strong-match accuracy (your good fits / model

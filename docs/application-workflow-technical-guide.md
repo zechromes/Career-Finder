@@ -552,7 +552,9 @@ labels as the reference (supervised evaluation); the app is not trained on them.
      jobs, a merged-duplicate check, and a label-free check that requirement
      quotes survive search-text cleaning.
    - *Retrieval:* shortlist recall and precision on the pool, missed good fits,
-     and an optional paid embedding comparison.
+     an optional paid embedding comparison, and a replay that re-ranks the frozen
+     pool under the earlier and current seniority rules and scores both on the same
+     labels (the first replay embeds the queries once; later replays are free).
    - *Generation:* each model's verdict against the labels (agreement on good
      fits, strong-match accuracy, good fits rejected, failures counted separately).
    - *Overview:* where each good fit ended up across the three stages.
@@ -564,4 +566,5 @@ storage and privacy.
 
 Source: [review_datasets.py](../backend/evaluation/review_datasets.py),
 [ReviewDatasetView.vue](../frontend/src/views/ReviewDatasetView.vue),
+[replay.py](../backend/evaluation/replay.py),
 [StageResults.vue](../frontend/src/components/StageResults.vue).
