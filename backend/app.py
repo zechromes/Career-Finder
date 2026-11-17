@@ -6,15 +6,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 # Shared paths, run storage, and the function that connects feature routers to the API.
 from backend.paths import DIST_DIR
-from backend import runs
+from backend import runs, api_keys
 from backend.routers import register_routers
 
 # Ensure the run folder exists and restore saved search state when the API starts.
 runs.RUNS_DIR.mkdir(exist_ok=True)
 runs.load_persisted_runs()
+# Keys saved on the Settings page take priority over .env.
+api_keys.load()
 
 # Create the application; this title and version also appear in the API documentation.
-app = FastAPI(title="Career Tracker Job Search API", version="1.0.0")
+app = FastAPI(title="Career Finder Job Search API", version="1.0.0")
 
 # Allow the local Vue development server to call this API from a different port.
 # Browsers use these CORS settings to decide which cross-origin requests are allowed.

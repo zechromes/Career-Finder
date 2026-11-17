@@ -16,5 +16,10 @@ LINKEDIN_DESCRIPTION_CACHE_DIR = PROJECT_ROOT / ".cache" / "linkedin_description
 JOB_DESCRIPTION_CACHE_DIR = PROJECT_ROOT / ".cache" / "job_descriptions"
 
 JOB_REQUIREMENT_CACHE_DIR = PROJECT_ROOT / ".cache" / "job_requirements"
-
+# Labeled datasets: the earlier review datasets and the ones built from job actions.
 REVIEW_DATASETS_DIR = PROJECT_ROOT / "data" / "evaluation_datasets"
+# Provider API keys saved from the Settings page; private like the rest of data/.
+API_KEYS_FILE = PROJECT_ROOT / "data" / "api_keys.json"
+# Generated HyDE job ads; derived from resumes, so private like the other caches.
+HYDE_QUERY_CACHE_DIR = PROJECT_ROOT / ".cache" / "hyde_queries"
+

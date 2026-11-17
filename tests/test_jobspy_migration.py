@@ -65,15 +65,14 @@ class JobSpyMigrationTests(unittest.TestCase):
     def test_country_selection_and_worldwide_coverage(self):
         # Check the expected behavior: country selection and worldwide coverage.
         self.assertEqual(_jobspy_countries("Sydney", "indeed"), ["australia"])
-        self.assertEqual(_jobspy_countries("Berlin, Germany", "glassdoor"), ["germany"])
+        self.assertEqual(_jobspy_countries("Berlin, Germany", "indeed"), ["germany"])
         self.assertEqual(_jobspy_countries("London, UK", "indeed"), ["uk"])
         self.assertIn("japan", _jobspy_countries("Worldwide", "indeed"))
-        self.assertNotIn("japan", _jobspy_countries("Worldwide", "glassdoor"))
         with patch("jobspy.scrape_jobs", return_value=pd.DataFrame()) as scrape:
-            fetch_job_vacancies(["Engineer"], [], ["glassdoor"], posted_days_old=0)
+            fetch_job_vacancies(["Engineer"], [], ["indeed"], posted_days_old=0)
         self.assertEqual(
             {c.kwargs["country_indeed"] for c in scrape.call_args_list},
-            set(_jobspy_countries("Worldwide", "glassdoor")),
+            set(_jobspy_countries("Worldwide", "indeed")),
         )
         self.assertTrue(
             all(c.kwargs["location"] is None for c in scrape.call_args_list)
@@ -122,7 +121,7 @@ class JobSpyMigrationTests(unittest.TestCase):
             scrape.assert_not_called()
 
     def test_worldwide_board_budget_caps_overdelivery_and_stops_searching(self):
-        for site in ("indeed", "glassdoor"):
+        for site in ("indeed",):
             with self.subTest(site=site):
                 frame = pd.DataFrame(
                     [
@@ -154,7 +153,7 @@ class JobSpyMigrationTests(unittest.TestCase):
                 self.assertEqual(progress, [5])
 
     def test_board_budget_is_shared_and_duplicate_jobs_do_not_consume_it(self):
-        for site in ("indeed", "glassdoor"):
+        for site in ("indeed",):
             with self.subTest(site=site):
                 batches = [
                     pd.DataFrame(

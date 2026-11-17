@@ -137,13 +137,66 @@ class AdaptiveTests(unittest.TestCase):
             cards,
             clock=lambda: now[0],
         )
-        self.assertEqual(result, [])
+        # The deadline ends search rounds; the checkpoint still reads collected cards.
+        self.assertEqual([job["url"] for job in result], [posting(1)["url"]])
         result = self.run_collection(
             [adaptive.Stream("indeed", "Engineer", "Sydney")],
             lambda *_: self.fail("cancelled search fetched"),
             cancelled=lambda: True,
         )
         self.assertEqual(result, [])
+
+    def test_fetch_limit_defers_descriptions_to_the_checkpoint(self):
+        def hydrate(rows, budget):
+            for row in rows:
+                if budget.can_detail():
+                    budget.fetch_detail(lambda job: None, row)
+                    row["description"] = "Fetched"
+            return rows
+
+        result = self.run_collection(
+            [adaptive.Stream("indeed", "Engineer", "Sydney")],
+            lambda stream, budget: [
+                dict(posting(f"{stream.offset}-{i}"), description="") for i in range(3)
+            ]
+            if stream.offset == 0
+            else [],
+            hydrate=hydrate,
+            config=dict(details=1),
+        )
+        self.assertEqual(len(result), 3)
+        self.assertTrue(all(job["description"] == "Fetched" for job in result))
+
+    def test_search_stops_once_waiting_cards_fill_the_fetch_budget(self):
+        calls = []
+
+        def cards(stream, budget):
+            calls.append((stream.query, stream.offset))
+            return [
+                dict(posting(f"{stream.query}-{stream.offset}-{i}"), description="")
+                for i in range(stream.size)
+            ]
+
+        def hydrate(rows, budget):
+            for row in rows:
+                if budget.can_detail():
+                    budget.fetch_detail(lambda job: None, row)
+                    row["description"] = "Fetched"
+            return rows
+
+        result = self.run_collection(
+            [
+                adaptive.Stream("indeed", "Engineer", "Sydney"),
+                adaptive.Stream("indeed", "Analyst", "Sydney"),
+            ],
+            cards,
+            hydrate=hydrate,
+            config=dict(details=5),
+        )
+        # The first page fills the 5-fetch budget, but every combination still gets
+        # its first page; no second pages; the checkpoint reads every collected card.
+        self.assertEqual(calls, [("Engineer", 0), ("Analyst", 0)])
+        self.assertEqual(len(result), 40)
 
     def test_description_budget_still_allows_cache(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -260,7 +313,9 @@ class AdaptiveTests(unittest.TestCase):
             ],
         ), patch(
             "backend.search.seek._request",
-            side_effect=SeekError("SEEK is temporarily rate-limited. Retry later."),
+            side_effect=SeekError(
+                "SEEK is temporarily rate-limited. Retry later.", rate_limited=True
+            ),
         ) as fetch:
             rows = fetch_job_vacancies(
                 ["Engineer"],

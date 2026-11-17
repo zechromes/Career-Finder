@@ -11,19 +11,25 @@ from pydantic import (
 )
 from backend.schemas.resume import ResumeProfile
 from backend.schemas.evaluation import RequirementVerdict
+from backend.schemas.tailored_resume import TailoredResume
 
 
 # Expose requirement evidence together with the code-verified quote flags.
 class VerifiedRequirement(RequirementVerdict):
     job_evidence_verified: bool = False
     resume_evidence_verified: bool = False
+    # Older saved assessments hold one quote; new ones keep the first verified quote here.
+    resume_quote: str = ""
+    resume_quotes_verified: list[bool] = Field(default_factory=list)
 
 
 # Validate search filters and shortlist size at the API boundary.
 class Preferences(BaseModel):
     queries: list[str] = Field(min_length=1, max_length=20)
     locations: list[str] = Field(default_factory=list, max_length=20)
-    platforms: list[Literal["linkedin", "indeed", "glassdoor", "seek"]] = Field(
+    platforms: list[
+        Literal["linkedin", "indeed", "seek", "google", "adzuna"]
+    ] = Field(
         default_factory=lambda: ["linkedin"], min_length=1
     )
 
@@ -31,10 +37,12 @@ class Preferences(BaseModel):
     @classmethod
     def remove_retired_feeds(cls, value):
         if isinstance(value, list):
-            value = [site for site in value if site not in ("greenhouse", "lever")]
+            value = [
+                site for site in value if site not in ("greenhouse", "lever", "glassdoor")
+            ]
             if not value:
                 raise ValueError(
-                    "Select at least one supported job board: LinkedIn, Indeed, Glassdoor or SEEK."
+                    "Select at least one supported job board: LinkedIn, Indeed, SEEK, Google Jobs or Adzuna."
                 )
         return value
 
@@ -44,7 +52,8 @@ class Preferences(BaseModel):
     ] = "auto"
     exclusions: list[str] = Field(default_factory=list, max_length=30)
     posted_days_old: Literal[0, 1, 7, 30] = 7
-    top_k: int = Field(default=50, ge=0, le=10000)
+    # -1 is Automatic: every job for pools up to 200, otherwise the top 100. 0 is every job.
+    top_k: int = Field(default=-1, ge=-1, le=10000)
     evaluation_model: Literal["gemini", "claude", "gpt"] = "claude"
 
 
@@ -64,11 +73,12 @@ class ModelEvaluation(BaseModel):
     model_config = ConfigDict(extra="allow")
     provider: str = ""
     evaluation_model_id: str = ""
-    status: Literal["pending", "complete", "failed"] = "pending"
+    status: Literal["pending", "complete", "failed", "skipped"] = "pending"
     error: str = ""
     score: int | None = None
     fit_category: Literal["strong_match", "review", "not_suitable"] = "review"
     rationale: str = ""
+    rule_exception: str = ""
     mismatch_reason: str = ""
     score_method: str = ""
     requirement_set_id: str = ""
@@ -84,8 +94,11 @@ class ModelEvaluation(BaseModel):
 # Define the public job snapshot, including evidence and per-provider assessments.
 class JobResult(BaseModel):
     model_config = ConfigDict(extra="allow")
+    # Present once a tailored resume was generated for this job.
+    tailored_resume: TailoredResume | None = None
     completed_models: int = 0
     agreement_count: int = 0
+    shortlist_rank: int | None = None
     provisional_score: int | None = None
     assessment_summary: str = ""
     model_evaluations: dict[str, ModelEvaluation] = Field(default_factory=dict)
@@ -154,6 +167,14 @@ class EvaluationError(BaseModel):
     skipped: bool = False
 
 
+# One search's time and scope, oldest first.
+class SearchRecord(BaseModel):
+    at: str
+    platforms: list[str] = Field(default_factory=list)
+    queries: list[str] = Field(default_factory=list)
+    locations: list[str] = Field(default_factory=list)
+
+
 # Describe the authoritative workspace state consumed by polling and streaming clients.
 class RunSnapshot(BaseModel):
     model_config = ConfigDict(extra="allow")
@@ -172,17 +193,23 @@ class RunSnapshot(BaseModel):
     message: str = ""
     error: str | None = None
     last_search_added: int = 0
+    searches: list[SearchRecord] = Field(default_factory=list)
     jobs_found: int = 0
     jobs_screened: int = 0
     evaluation_total: int = 0
     evaluated_jobs: int = 0
     evaluation_failed: int = 0
+    # A targeted retry's own progress (model assessments); 0 when no retry is running.
+    retry_total: int = 0
+    retry_done: int = 0
     displayed_jobs: int = 0
     excluded_jobs: int = 0
     recommendations: list[JobResult] = Field(default_factory=list)
     excluded_recommendations: list[JobResult] = Field(default_factory=list)
     evaluation_errors: list[EvaluationError] = Field(default_factory=list)
     scrape_errors: list[str] = Field(default_factory=list)
+    skipped_models: list[str] = Field(default_factory=list)
+    busy_boards: list[str] = Field(default_factory=list)
     evaluation_model_id: str = ""
     evaluation_model: str = ""
     revision: int = 0
@@ -200,6 +227,18 @@ class ModelOption(BaseModel):
     model_id: str = ""
     value: str
     label: str
+
+
+class ApiKeyInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    api_key: str = Field(max_length=500)
+
+
+class ApiKeyStatus(BaseModel):
+    provider: str
+    label: str
+    source: Literal["settings", "env"] | None
+    hint: str
 
 
 class DismissalInput(BaseModel):

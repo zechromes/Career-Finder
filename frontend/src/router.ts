@@ -4,9 +4,9 @@ import UploadView from './views/UploadView.vue'
 import RunView from './views/RunView.vue'
 import JobDetailView from './views/JobDetailView.vue'
 import ProfilesView from './views/ProfilesView.vue'
-import ReviewDatasetView from './views/ReviewDatasetView.vue'
 import EvalView from './views/EvalView.vue'
 import PrivacyView from './views/PrivacyView.vue'
+import SettingsView from './views/SettingsView.vue'
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
@@ -17,7 +17,7 @@ export const router = createRouter({
     { path: '/run/:runId/job', component: JobDetailView },
     { path: '/privacy', component: PrivacyView },
     { path: '/eval', component: EvalView },
-    { path: '/eval/datasets/:datasetId', component: ReviewDatasetView },
+    { path: '/settings', component: SettingsView },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })

@@ -22,36 +22,63 @@ const assessment = computed(() =>
 )
 const status = computed(() => (activeKey.value ? assessment.value?.status : 'complete'))
 const evidence = computed(() => assessment.value?.requirement_verdicts || [])
-// Keep independent navigation for each source section; reset when switching models.
-const indices = ref<Record<string, number>>({})
-watch(activeKey, () => {
-  indices.value = {}
+// A verdict filter and the long-summary toggle; both reset for another model or job.
+const filter = ref('')
+const fullSummary = ref(false)
+watch([activeKey, () => props.job.jobId || props.job.apply_url], () => {
+  filter.value = ''
+  fullSummary.value = false
 })
-watch(
-  () => props.job.jobId || props.job.apply_url,
-  () => {
-    indices.value = {}
-  },
+const SUMMARY_LIMIT = 400
+const longSummary = computed(
+  () =>
+    (assessment.value?.rationale?.length || 0) > SUMMARY_LIMIT ||
+    (assessment.value?.about_company?.length || 0) > SUMMARY_LIMIT,
 )
+// Gaps first, required before preferred, so the list opens on what needs attention.
+const verdictOrder = ['not_met', 'partial', 'unknown', 'met']
+const importanceOrder = ['must_have', 'unclear', 'nice_to_have']
+const rank = (order: string[], value?: string | null) => {
+  const index = order.indexOf(value || '')
+  return index < 0 ? order.length : index
+}
 const sections = computed(() => {
   const grouped = new Map<string, typeof evidence.value>()
   for (const row of evidence.value) {
+    if (filter.value && row.verdict !== filter.value) continue
     const title =
       row.section || requirementSection(props.job.job_description || '', row.job_quote || '')
     grouped.set(title, [...(grouped.get(title) || []), row])
   }
-  return [...grouped].map(([title, items]) => {
-    const index = Math.min(indices.value[title] || 0, items.length - 1)
-    return { title, items, index, visible: items.slice(index, index + 1) }
-  })
+  return [...grouped].map(([title, items]) => ({
+    title,
+    items: [...items].sort(
+      (a, b) =>
+        rank(verdictOrder, a.verdict) - rank(verdictOrder, b.verdict) ||
+        rank(importanceOrder, a.importance) - rank(importanceOrder, b.importance),
+    ),
+  }))
 })
-function moveRequirement(title: string, direction: number) {
-  const section = sections.value.find((item) => item.title === title)
-  if (section)
-    indices.value[title] = Math.max(
-      0,
-      Math.min(section.items.length - 1, section.index + direction),
-    )
+const importanceLabels: Record<string, string> = {
+  must_have: 'Required',
+  nice_to_have: 'Preferred',
+}
+// New assessments list several resume quotes; older ones hold a single quote.
+type Evidence = {
+  resume_quote?: string
+  resume_quotes?: string[]
+  resume_quotes_verified?: boolean[]
+  resume_evidence_verified?: boolean
+}
+function resumeQuotes(item: Evidence) {
+  return item.resume_quotes?.length
+    ? item.resume_quotes
+    : item.resume_quote
+      ? [item.resume_quote]
+      : []
+}
+function quoteVerified(item: Evidence, index: number) {
+  return item.resume_quotes_verified?.[index] ?? !!item.resume_evidence_verified
 }
 const labels: Record<string, string> = {
   met: 'Met',
@@ -63,6 +90,7 @@ const labels: Record<string, string> = {
   not_suitable: 'Not recommended',
   pending: 'Waiting',
   failed: 'Failed',
+  skipped: 'Skipped',
 }
 const colors: Record<string, string> = {
   met: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200',
@@ -115,20 +143,22 @@ const colors: Record<string, string> = {
           model.evaluation_model_id
         }}</span>
         <span class="mt-4 block text-2xl font-bold">{{
-          model.status === 'complete'
-            ? model.score == null
-              ? 'Unscored'
+          model.status !== 'complete'
+            ? labels[model.status]
+            : model.score == null
+              ? labels[model.fit_category]
               : `${model.score}/100`
-            : labels[model.status]
         }}</span
-        ><span v-if="model.status === 'complete'" class="mt-1 block text-sm">{{
-          labels[model.fit_category]
-        }}</span>
+        ><span
+          v-if="model.status === 'complete' && model.score != null"
+          class="mt-1 block text-sm"
+          >{{ labels[model.fit_category] }}</span
+        >
       </button>
     </div>
     <p v-if="models.length" class="mt-3 text-xs text-slate-600 dark:text-slate-300">
-      The overall score averages all three scored assessments. Disagreement or an incomplete
-      assessment keeps the overall verdict For review.
+      Each model decides its own verdict. The overall verdict needs every model to agree;
+      disagreement or an incomplete assessment keeps it For review.
     </p>
     <div
       v-if="status === 'failed'"
@@ -138,6 +168,17 @@ const colors: Record<string, string> = {
       <h3 class="font-semibold">This model could not evaluate the job</h3>
       <p class="mt-2">{{ assessment?.error || 'The provider request failed.' }}</p>
       <p class="mt-2 text-sm">Return to results to retry failed model assessments.</p>
+    </div>
+    <div
+      v-else-if="status === 'skipped'"
+      role="status"
+      class="mt-6 rounded-xl bg-slate-50 p-5 dark:bg-slate-950"
+    >
+      <h3 class="font-semibold">This model was skipped</h3>
+      <p class="mt-2">{{ assessment?.error || 'The model was unavailable.' }}</p>
+      <p class="mt-2 text-sm">
+        The overall verdict uses the other models. Return to results to retry skipped models.
+      </p>
     </div>
     <p
       v-else-if="status === 'pending'"
@@ -149,14 +190,29 @@ const colors: Record<string, string> = {
     <template v-else>
       <div class="mt-6 rounded-xl bg-slate-50 p-5 dark:bg-slate-950">
         <h3 class="font-semibold">Assessment summary</h3>
-        <p class="mt-2 whitespace-pre-wrap leading-7">
+        <p
+          class="mt-2 max-w-prose whitespace-pre-wrap leading-7"
+          :class="{ 'line-clamp-4': longSummary && !fullSummary }"
+        >
           {{ assessment?.rationale || 'Rationale unavailable.' }}
         </p>
+        <button
+          v-if="longSummary"
+          type="button"
+          class="mt-2 text-sm font-semibold text-indigo-700 underline dark:text-indigo-300"
+          :aria-expanded="fullSummary"
+          @click="fullSummary = !fullSummary"
+        >
+          {{ fullSummary ? 'Show less' : 'Show full summary' }}
+        </button>
         <p
           v-if="assessment?.mismatch_reason"
           class="mt-3 font-medium text-amber-900 dark:text-amber-200"
         >
           {{ assessment.mismatch_reason }}
+        </p>
+        <p v-if="assessment?.rule_exception" class="mt-3">
+          <span class="font-semibold">Rule set aside:</span> {{ assessment.rule_exception }}
         </p>
         <p class="mt-3 text-xs text-slate-600 dark:text-slate-300">
           {{ assessment?.evaluation_model_id || 'Historical assessment' }} ·
@@ -166,7 +222,9 @@ const colors: Record<string, string> = {
       <div class="mt-5 grid gap-5 md:grid-cols-2">
         <section v-if="assessment?.about_company">
           <h3 class="font-semibold">About the company</h3>
-          <p class="mt-2 leading-6">{{ assessment.about_company }}</p>
+          <p class="mt-2 leading-6" :class="{ 'line-clamp-3': longSummary && !fullSummary }">
+            {{ assessment.about_company }}
+          </p>
         </section>
         <section>
           <h3 class="font-semibold">Missing skills</h3>
@@ -200,128 +258,113 @@ const colors: Record<string, string> = {
           </p>
         </section>
       </div>
-      <div class="mt-6 flex flex-wrap gap-2" aria-label="Requirement summary">
-        <span
-          v-for="key in ['met', 'partial', 'not_met', 'unknown']"
-          :key="key"
-          class="rounded-full px-3 py-1 text-sm font-medium"
-          :class="colors[key]"
-          >{{ evidence.filter((item) => item.verdict === key).length }} {{ labels[key] }}</span
-        >
-      </div>
-      <section
-        v-for="section in sections"
-        :key="section.title"
-        class="mt-6"
-        role="region"
-        aria-roledescription="carousel"
-        :aria-label="
-          sections.length === 1 ? 'Requirement evidence' : `${section.title} requirement evidence`
-        "
-        @keydown.left.prevent="moveRequirement(section.title, -1)"
-        @keydown.right.prevent="moveRequirement(section.title, 1)"
-      >
-        <h3 class="mb-4 text-lg font-semibold">{{ section.title }}</h3>
-        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <p
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
-            class="text-sm font-medium text-slate-600 dark:text-slate-300"
-          >
-            Requirement {{ section.index + 1 }} of {{ section.items.length }}
+      <div v-if="evidence.length" class="mt-8 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 class="text-lg font-semibold">Requirements</h3>
+          <p class="mt-0.5 text-xs text-slate-600 dark:text-slate-300">
+            Gaps first. Open a requirement to compare the posting with your resume.
           </p>
-          <div class="flex gap-2">
-            <button
-              type="button"
-              aria-label="Previous requirement"
-              :disabled="section.index === 0"
-              @click="moveRequirement(section.title, -1)"
-              class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:hover:bg-slate-800"
-            >
-              ← Previous
-            </button>
-            <button
-              type="button"
-              aria-label="Next requirement"
-              :disabled="section.index === section.items.length - 1"
-              @click="moveRequirement(section.title, 1)"
-              class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:hover:bg-slate-800"
-            >
-              Next →
-            </button>
-          </div>
         </div>
-        <div
-          v-for="item in section.visible"
-          :key="section.index"
-          role="group"
-          aria-roledescription="slide"
-          :aria-label="`Requirement ${section.index + 1} of ${section.items.length}`"
-          class="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700"
-        >
-          <div
-            class="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 p-5 dark:border-slate-700"
+        <div role="group" aria-label="Show requirements by verdict" class="flex flex-wrap gap-2">
+          <button
+            v-for="key in verdictOrder"
+            :key="key"
+            type="button"
+            class="rounded-full px-3 py-1 text-sm font-medium ring-offset-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 disabled:opacity-40 dark:ring-offset-slate-900"
+            :class="[colors[key], filter === key ? 'ring-2 ring-slate-700 dark:ring-slate-200' : '']"
+            :aria-pressed="filter === key"
+            :disabled="!evidence.some((item) => item.verdict === key)"
+            @click="filter = filter === key ? '' : key"
           >
-            <div class="min-w-0 flex-1">
-              <p
-                class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400"
-              >
-                {{
-                  item.importance === 'must_have'
-                    ? 'Required'
-                    : item.importance === 'nice_to_have'
-                      ? 'Preferred'
-                      : 'Importance unclear'
-                }}
-              </p>
-              <h3 class="mt-1 break-words font-semibold">{{ item.requirement }}</h3>
-            </div>
-            <span
-              class="rounded-full px-3 py-1 text-sm font-semibold"
-              :class="colors[item.verdict]"
-              >{{ labels[item.verdict] }}</span
-            >
-            <p
-              v-if="item.explanation"
-              class="w-full text-sm leading-6 text-slate-600 dark:text-slate-300"
-            >
-              {{ item.explanation }}
-            </p>
-          </div>
-          <div class="grid gap-5 p-5 md:grid-cols-2">
-            <div>
-              <p
-                class="text-xs font-bold uppercase tracking-wide text-indigo-700 dark:text-indigo-300"
-              >
-                Job posting
-              </p>
-              <blockquote
-                class="mt-3 whitespace-pre-wrap break-words border-l-2 border-indigo-300 pl-3 text-sm leading-6"
-              >
-                {{ item.job_quote || 'No supporting quote recorded.' }}
-              </blockquote>
-              <p class="mt-3 text-xs text-slate-600 dark:text-slate-300">
-                {{ item.job_evidence_verified ? 'Verified against posting' : 'Quote not verified' }}
-              </p>
-            </div>
-            <div>
-              <p class="text-xs font-bold uppercase tracking-wide text-teal-700 dark:text-teal-300">
-                Your resume
-              </p>
-              <blockquote
-                class="mt-3 whitespace-pre-wrap break-words border-l-2 border-teal-300 pl-3 text-sm leading-6"
-              >
-                {{ item.resume_quote || 'No supporting quote recorded.' }}
-              </blockquote>
-              <p class="mt-3 text-xs text-slate-600 dark:text-slate-300">
-                {{
-                  item.resume_evidence_verified ? 'Verified against resume' : 'Quote not verified'
-                }}
-              </p>
-            </div>
-          </div>
+            {{ evidence.filter((item) => item.verdict === key).length }} {{ labels[key] }}
+          </button>
         </div>
+      </div>
+      <section v-for="section in sections" :key="section.title" class="mt-5">
+        <h4
+          class="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400"
+        >
+          {{ section.title }}
+        </h4>
+        <ul
+          class="divide-y divide-slate-200 rounded-xl border border-slate-200 dark:divide-slate-700 dark:border-slate-700"
+        >
+          <li v-for="(item, index) in section.items" :key="item.requirement_id || index">
+            <details class="group">
+              <summary
+                class="flex cursor-pointer list-none items-start gap-3 p-4 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 dark:hover:bg-slate-800 [&::-webkit-details-marker]:hidden"
+              >
+                <span
+                  class="mt-0.5 w-28 shrink-0 rounded-full px-2.5 py-1 text-center text-xs font-semibold"
+                  :class="colors[item.verdict]"
+                  >{{ labels[item.verdict] }}</span
+                >
+                <span class="min-w-0 flex-1">
+                  <span class="break-words font-medium">{{ item.requirement }}</span>
+                  <span class="ml-2 text-xs text-slate-500 dark:text-slate-400">{{
+                    importanceLabels[item.importance || ''] || 'Importance unclear'
+                  }}</span>
+                  <span
+                    v-if="item.explanation"
+                    class="mt-1 block text-sm leading-6 text-slate-600 dark:text-slate-300"
+                    >{{ item.explanation }}</span
+                  >
+                </span>
+                <span
+                  aria-hidden="true"
+                  class="mt-1 shrink-0 text-slate-400 transition-transform group-open:rotate-180 motion-reduce:transition-none"
+                  >▾</span
+                >
+              </summary>
+              <div class="grid gap-5 px-4 pb-5 sm:pl-[8.75rem] md:grid-cols-2">
+                <div class="min-w-0">
+                  <p
+                    class="text-xs font-bold uppercase tracking-wide text-indigo-700 dark:text-indigo-300"
+                  >
+                    Job posting
+                    <span class="ml-1 font-normal normal-case tracking-normal text-slate-500">{{
+                      item.job_evidence_verified ? '· Verified against posting' : '· Quote not verified'
+                    }}</span>
+                  </p>
+                  <blockquote
+                    class="mt-2 whitespace-pre-wrap break-words border-l-2 border-indigo-300 pl-3 text-sm leading-6"
+                  >
+                    {{ item.job_quote || 'No supporting quote recorded.' }}
+                  </blockquote>
+                </div>
+                <div class="min-w-0">
+                  <p
+                    class="text-xs font-bold uppercase tracking-wide text-teal-700 dark:text-teal-300"
+                  >
+                    Your resume
+                  </p>
+                  <template v-if="resumeQuotes(item).length">
+                    <div v-for="(quote, quoteIndex) in resumeQuotes(item)" :key="quoteIndex" class="mt-2">
+                      <blockquote
+                        class="whitespace-pre-wrap break-words border-l-2 border-teal-300 pl-3 text-sm leading-6"
+                      >
+                        {{ quote }}
+                      </blockquote>
+                      <p class="mt-1 pl-3 text-xs text-slate-500 dark:text-slate-400">
+                        {{
+                          quoteVerified(item, quoteIndex)
+                            ? 'Verified against resume'
+                            : 'Quote not verified'
+                        }}
+                      </p>
+                    </div>
+                  </template>
+                  <blockquote
+                    v-else
+                    class="mt-2 whitespace-pre-wrap break-words border-l-2 border-teal-300 pl-3 text-sm leading-6"
+                  >
+                    No supporting quote recorded.
+                  </blockquote>
+                </div>
+              </div>
+            </details>
+          </li>
+        </ul>
       </section>
       <div
         v-if="!evidence.length"

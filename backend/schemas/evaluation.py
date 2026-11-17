@@ -43,7 +43,10 @@ class RequirementVerdict(BaseModel):
     ] = "other"
     verdict: Literal["met", "partial", "not_met", "unknown"]
     job_quote: str
-    resume_quote: str = ""
+    resume_quotes: list[str] = Field(
+        default_factory=list,
+        description="Every short verbatim resume passage that supports this verdict, usually one to three, from any section; empty when the resume does not mention the requirement.",
+    )
     explanation: str = ""
 
 
@@ -51,13 +54,7 @@ class JobEvaluation(BaseModel):
     model_config = ConfigDict(extra="forbid")
     requirement_verdicts: list[RequirementVerdict] = Field(
         default_factory=list,
-        description="Return one verdict for every shared requirement_id, preserving its canonical fields exactly. Quote resume evidence verbatim. Missing resume evidence is unknown, not not_met.",
-    )
-    score: int | None = Field(
-        default=None,
-        ge=0,
-        le=100,
-        description="Evidence-based fit score 0-100: 80-100 strong match, 40-79 review, 0-39 unsuitable. Not a probability.",
+        description="Return one verdict for every shared requirement_id, preserving its canonical fields exactly. Quote resume evidence verbatim. A requirement the resume does not mention is not_met with empty resume_quotes.",
     )
     work_type: Literal["remote", "hybrid", "on-site", "unknown"] = Field(
         default="unknown",
@@ -90,7 +87,11 @@ class JobEvaluation(BaseModel):
     )
     fit_category: Literal["strong_match", "review", "not_suitable"] = Field(
         default="review",
-        description="Overall candidate suitability: strong_match, review, or not_suitable.",
+        description="Your final decision on overall candidate suitability: strong_match, review, or not_suitable. The application uses it as given.",
+    )
+    rule_exception: str = Field(
+        default="",
+        description="If the verdict sets aside one of the career-level or seniority rules, name the rule and explain why, quoting the posting. Empty otherwise.",
     )
     mismatch_reason: str = Field(
         default="",

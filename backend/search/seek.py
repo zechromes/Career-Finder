@@ -4,6 +4,7 @@ Independent implementation; no upstream code, database or AI pipeline is importe
 """
 
 from backend.observability import stage
+from backend.search.board_cooldown import RateLimitNotice
 import json
 import re
 import threading
@@ -17,10 +18,14 @@ from bs4 import BeautifulSoup
 _LOCK = threading.Lock()
 _NEXT_REQUEST = 0.0
 _COOLDOWN = 0.0
+_COOLDOWN_STATUS = 429
 
 
 class SeekError(RuntimeError):
-    pass
+    def __init__(self, message, rate_limited=False):
+        super().__init__(message)
+        # True only for a confirmed HTTP 429, so callers need not parse the text.
+        self.rate_limited = rate_limited
 
 
 def _supported_url(url):
@@ -49,7 +54,7 @@ def urlopen(request, timeout):
 
 
 def _request(url, cancelled):
-    global _NEXT_REQUEST, _COOLDOWN
+    global _NEXT_REQUEST, _COOLDOWN, _COOLDOWN_STATUS
     if not _supported_url(url):
         raise SeekError("SEEK redirected to an unsupported page.")
     while not _LOCK.acquire(timeout=0.1):
@@ -57,7 +62,11 @@ def _request(url, cancelled):
             return None
     try:
         if time.monotonic() < _COOLDOWN:
-            raise SeekError("SEEK is temporarily rate-limited. Retry later.")
+            if _COOLDOWN_STATUS == 429:
+                raise SeekError(
+                    "SEEK is temporarily rate-limited. Retry later.", rate_limited=True
+                )
+            raise SeekError("SEEK is temporarily blocking requests. Retry later.")
         while time.monotonic() < _NEXT_REQUEST:
             if cancelled():
                 return None
@@ -86,8 +95,14 @@ def _request(url, cancelled):
                 except (ValueError, TypeError, AttributeError):
                     delay = 300
                 _COOLDOWN = time.monotonic() + min(86400, max(60, delay))
+                _COOLDOWN_STATUS = exc.code
+                if exc.code == 429:
+                    raise SeekError(
+                        "SEEK rate-limited the request (HTTP 429). Retry later.",
+                        rate_limited=True,
+                    ) from None
                 raise SeekError(
-                    "SEEK blocked or rate-limited the request. Retry later."
+                    "SEEK blocked the request (HTTP 403). Retry later."
                 ) from None
             raise SeekError("SEEK request failed. Retry later.") from None
         except SeekError:
@@ -264,7 +279,7 @@ def collect(
                 break
     except Exception as exc:
         message = (
-            str(exc)
+            (RateLimitNotice if exc.rate_limited else str)(str(exc))
             if isinstance(exc, SeekError)
             else "SEEK returned an unsupported response. Results may be incomplete."
         )

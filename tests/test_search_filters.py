@@ -33,3 +33,13 @@ class SearchFilterTests(unittest.TestCase):
         self.assertFalse(matches_seniority("Senior Engineer", "entry"))
         self.assertTrue(matches_seniority("Sr. Engineer", "senior"))
         self.assertFalse(matches_seniority("Seniority analyst", "senior"))
+
+
+class PostingAgeTests(unittest.TestCase):
+    def test_date_only_posting_on_the_last_day_of_the_window_is_kept(self):
+        from datetime import datetime, timedelta, timezone
+        from backend.search.collection import _is_recent
+
+        today = datetime.now(timezone.utc).date()
+        self.assertTrue(_is_recent((today - timedelta(days=7)).isoformat(), 7))
+        self.assertFalse(_is_recent((today - timedelta(days=8)).isoformat(), 7))

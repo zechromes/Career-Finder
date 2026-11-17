@@ -8,8 +8,15 @@ from backend.evaluation.candidate_fit import (
     posting_exceeds_candidate_level,
     experience_context,
 )
+from backend.search.hyde import HYDE_PREFIX
 from backend.search.ranking import reciprocal_rank_fusion
 from backend.search.shared_index import read_scope, corpus
+
+# top_k=-1 ("Automatic"): small pools are evaluated whole, because similarity ranking missed
+# a third of the labeled strong matches at 100 on a 158-job pool; larger pools keep the top 100.
+AUTO_SHORTLIST = -1
+AUTO_ALL_UP_TO = 200
+AUTO_LARGE_POOL_TOP_K = 100
 
 
 @stage("jobs.retrieve")
@@ -50,6 +57,9 @@ def retrieve_relevant_jobs(
     collection_count = len(scope["ids"]) if scope else vector_store._collection.count()
     if not collection_count:
         return []
+    if top_k == AUTO_SHORTLIST:
+        # Counted before deduplication, so a pool just over the limit may hold fewer unique jobs.
+        top_k = 0 if collection_count <= AUTO_ALL_UP_TO else AUTO_LARGE_POOL_TOP_K
 
     prioritize_level = (
         candidate_profile is not None
@@ -74,9 +84,10 @@ def retrieve_relevant_jobs(
         index_by_identity = {
             identity(doc): index for index, doc in enumerate(documents)
         }
-        rankings = []
+        rankings, weights = [], []
 
         for query in query_texts:
+            weight = query_weights.get(query, 1.0) if query_weights is not None else 1.0
             semantic = vector_store.similarity_search(
                 query, k=search_k, **search_filter
             )
@@ -87,17 +98,15 @@ def retrieve_relevant_jobs(
                     if identity(doc) in index_by_identity
                 ]
             )
+            # Generated ads carry posting boilerplate that would skew BM25: dense only.
+            if query.startswith(HYDE_PREFIX):
+                weights.append(weight)
+                continue
             rankings.append(lexical.rank(query, search_k))
-        weights = (
-            [
-                query_weights.get(query, 1.0) / 2
-                for query in query_texts
-                for _ in range(2)
-            ]
-            if query_weights is not None
-            else None
+            weights += [weight / 2, weight / 2]
+        ranked = reciprocal_rank_fusion(
+            rankings, len(ids), weights=weights if query_weights is not None else None
         )
-        ranked = reciprocal_rank_fusion(rankings, len(ids), weights=weights)
 
         if top_k == 0:
             ranked_set = set(ranked)

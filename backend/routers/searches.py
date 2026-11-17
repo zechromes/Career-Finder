@@ -26,6 +26,13 @@ def build_router(handlers):
     def update_job_action(run_id: str, body: JobActionUpdate):
         return runs_api.job_actions(run_id, body)
 
+    from backend.schemas.tailored_resume import TailoredResume, TailoredResumeRequest
+
+    # One live Claude call; the resume is also saved with the job in this search's results.
+    @router.post("/api/searches/{run_id}/tailored-resume", response_model=TailoredResume)
+    def create_tailored_resume(run_id: str, body: TailoredResumeRequest):
+        return runs_api.tailored_resume(run_id, body.key)
+
     ############################################
     # - Endpoint: POST /api/runs/{run_id}/search
     ############################################
@@ -54,7 +61,7 @@ def build_router(handlers):
         run_id: str,
         queries: str = Form(...),
         locations: str = Form(""),
-        platforms: str = Form("linkedin,indeed,glassdoor"),
+        platforms: str = Form("linkedin,indeed"),
         remote: bool = Form(False),
         posted_days_old: int = Form(30),
         top_k: int = Form(15),

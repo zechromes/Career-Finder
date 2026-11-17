@@ -65,7 +65,7 @@ def assessment(shared):
             dict(
                 row.model_dump(),
                 verdict="met",
-                resume_quote="Python and SQL",
+                resume_quotes=["Python and SQL"],
                 explanation="Supported",
             )
             for row in shared.requirements
@@ -359,7 +359,7 @@ class SharedRequirementsTests(unittest.TestCase):
                 importance="unclear",
                 verdict="not_met",
                 job_quote="Build APIs",
-                resume_quote="No API experience",
+                resume_quotes=["No API experience"],
             )
         ]
         score, category, _, _ = score_requirements(

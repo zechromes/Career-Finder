@@ -2,7 +2,7 @@
 from backend.observability import stage, submit, mark
 from backend.search.embedding_cache import CachedJobEmbeddings
 from backend.search.collection_cache import CollectionCache
-from backend.search import ingestion_log
+from backend.search import board_cooldown, ingestion_log
 from backend.paths import JOB_EMBEDDING_CACHE_DIR
 from difflib import SequenceMatcher
 from backend.search.embedding_text import job_embedding_text
@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from email.utils import parsedate_to_datetime
+from urllib.error import HTTPError
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 import json
@@ -98,11 +99,12 @@ def _parse_posted_at(posted_at: str) -> datetime | None:
                 return now
             if text == "yesterday":
                 return now - timedelta(days=1)
-            match = re.search(r"(\d+)\s*(hour|day|week|month)s?\s*ago", text)
+            match = re.search(r"(\d+)\s*(minute|hour|day|week|month)s?\s*ago", text)
             if match:
                 amount = int(match.group(1))
                 unit = match.group(2)
                 delta = {
+                    "minute": timedelta(minutes=amount),
                     "hour": timedelta(hours=amount),
                     "day": timedelta(days=amount),
                     "week": timedelta(weeks=amount),
@@ -121,7 +123,9 @@ def _is_recent(posted_at: str, days_old: int) -> bool:
     if posted is None:
         # Keep undated records because some boards omit publication metadata.
         return True
-    return posted >= datetime.now(timezone.utc) - timedelta(days=days_old)
+    # Compare calendar days: JobSpy gives date-only values (midnight), so a job
+    # listed 7 days ago would otherwise fall hours outside a 7-day window.
+    return posted.date() >= (datetime.now(timezone.utc) - timedelta(days=days_old)).date()
 
 
 def _newest_first(jobs: list[dict]) -> list[dict]:
@@ -293,9 +297,18 @@ ADZUNA_COUNTRIES = {
 }
 
 
-def _country_for_location(location: str) -> str:
-    """Map common locations to Adzuna's country path."""
+def _country_for_location(location: str, default: str | None = "") -> str | None:
+    """Map a location to a two-letter country code (Adzuna's country path).
+
+    A country named in any comma part wins, for example "Berlin, Germany". When
+    nothing matches, `default` is returned; the empty-string default keeps the
+    configured fallback (ADZUNA_COUNTRY, else Australia).
+    """
     text = location.lower()
+    names = {name.casefold(): code for code, name in ADZUNA_COUNTRIES.items()}
+    for part in reversed([part.strip() for part in text.split(",")]):
+        if part in names:
+            return names[part]
     country_codes = {
         "au": ("australia", "sydney", "melbourne", "brisbane", "perth", "adelaide"),
         "us": (
@@ -316,7 +329,9 @@ def _country_for_location(location: str) -> str:
     for code, terms in country_codes.items():
         if any(term in text for term in terms):
             return code
-    return os.getenv("ADZUNA_COUNTRY", "au").lower()
+    if default == "":
+        return os.getenv("ADZUNA_COUNTRY", "au").lower()
+    return default
 
 
 def _group_apify_locations(locations: list[str]) -> list[tuple[str, list[str]]]:
@@ -334,6 +349,51 @@ def _group_apify_locations(locations: list[str]) -> list[tuple[str, list[str]]]:
             "locations"
         ].append(location)
     return [(group["search_location"], group["locations"]) for group in groups.values()]
+
+
+def _adzuna_page(
+    query, location, country, page, size, remote, posted_days_old, label=""
+):
+    """One page of Adzuna results; descriptions are Adzuna's snippet, not full text."""
+    params = {
+        "app_id": os.getenv("ADZUNA_APP_ID"),
+        "app_key": os.getenv("ADZUNA_APP_KEY"),
+        "results_per_page": min(max(size, 1), 50),
+        "what": f"{query} remote" if remote else query,
+        "content-type": "application/json",
+        "sort_by": "date",
+    }
+    if location:
+        params["where"] = location
+    if posted_days_old:
+        params["max_days_old"] = posted_days_old
+    endpoint = (
+        f"https://api.adzuna.com/v1/api/jobs/{country}/search/{page}?{urlencode(params)}"
+    )
+    request = Request(endpoint, headers={"User-Agent": "CareerTracker/1.0"})
+    with urlopen(request, timeout=20) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    label = label or location
+    return [
+        {
+            "title": _text_value(item, "title", default="Unknown Title"),
+            "company": _text_value(
+                item.get("company", {}), "display_name", default="Unknown Company"
+            ),
+            "location": _text_value(
+                item.get("location", {}), "display_name", default=label
+            ),
+            "description": _description_value(item),
+            "company_logo": _text_value(
+                item, "company_logo", "companyLogo", "companyLogoUrl", "logoUrl"
+            ),
+            "url": _text_value(item, "redirect_url", default="No URL provided"),
+            "source_platform": "adzuna",
+            "requested_location": location or label,
+            "posted_at": _posted_value(item),
+        }
+        for item in payload.get("results", [])
+    ]
 
 
 def _fetch_adzuna_jobs(
@@ -362,49 +422,16 @@ def _fetch_adzuna_jobs(
         if should_cancel and should_cancel():
             return []
         country = location if worldwide else _country_for_location(location)
-        params = {
-            "app_id": app_id,
-            "app_key": app_key,
-            "results_per_page": min(max(n_result, 1), 50),
-            "what": query,
-            "where": location,
-            "content-type": "application/json",
-            "sort_by": "date",
-        }
-        if worldwide:
-            params.pop("where")
-        if posted_days_old:
-            params["max_days_old"] = posted_days_old
-        if remote:
-            params["what"] = f"{query} remote"
-        endpoint = (
-            f"https://api.adzuna.com/v1/api/jobs/{country}/search/1?{urlencode(params)}"
+        return _adzuna_page(
+            query,
+            "" if worldwide else location,
+            country,
+            1,
+            n_result,
+            remote,
+            posted_days_old,
+            label=ADZUNA_COUNTRIES[location] if worldwide else location,
         )
-        request = Request(endpoint, headers={"User-Agent": "CareerTracker/1.0"})
-        with urlopen(request, timeout=20) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-        return [
-            {
-                "title": _text_value(item, "title", default="Unknown Title"),
-                "company": _text_value(
-                    item.get("company", {}), "display_name", default="Unknown Company"
-                ),
-                "location": _text_value(
-                    item.get("location", {}),
-                    "display_name",
-                    default=ADZUNA_COUNTRIES[location] if worldwide else location,
-                ),
-                "description": _description_value(item),
-                "company_logo": _text_value(
-                    item, "company_logo", "companyLogo", "companyLogoUrl", "logoUrl"
-                ),
-                "url": _text_value(item, "redirect_url", default="No URL provided"),
-                "source_platform": "adzuna",
-                "requested_location": location,
-                "posted_at": _posted_value(item),
-            }
-            for item in payload.get("results", [])
-        ]
 
     jobs = []
     with ThreadPoolExecutor(
@@ -444,7 +471,6 @@ def _jobspy_countries(location: str, site: str) -> list[str]:
         country
         for country in Country
         if country.name not in {"WORLDWIDE", "US_CANADA"}
-        and (site != "glassdoor" or len(country.value) == 3)
     ]
     if _worldwide([location]):
         return [country.value[0].split(",")[0] for country in supported]
@@ -462,6 +488,9 @@ def _jobspy_countries(location: str, site: str) -> list[str]:
     raise ValueError(f"{site} does not support the country for {location}.")
 
 
+RATE_LIMIT_PAUSE_SECONDS = 30
+
+
 class _ScraperFailures(logging.Handler):
     """JobSpy sometimes logs an error and returns partial rows instead of raising."""
 
@@ -477,7 +506,6 @@ class _ScraperFailures(logging.Handler):
         board = {
             "linkedin": "LinkedIn",
             "indeed": "Indeed",
-            "glassdoor": "Glassdoor",
         }.get(record.name.partition(":")[2].lower(), "A job board")
         message = record.getMessage()
         status = re.search(
@@ -489,7 +517,12 @@ class _ScraperFailures(logging.Handler):
         messages = []
         for board, status in sorted(self.failures):
             if status == "429":
-                detail = "rate-limited the request (HTTP 429). Wait before searching this board again, or deselect it to continue with other sources."
+                messages.append(
+                    board_cooldown.RateLimitNotice(
+                        f"{board} rate-limited the request (HTTP 429). Wait before searching this board again, or deselect it to continue with other sources. Results already collected are retained, but may be incomplete."
+                    )
+                )
+                continue
             elif status == "403":
                 detail = "blocked the request (HTTP 403). You can deselect this board and continue with other sources."
             else:
@@ -537,10 +570,13 @@ def fetch_job_vacancies(
 ):
     """Reuse recent complete searches; expired and failed searches are recollected."""
     provider = os.getenv("JOB_SEARCH_PROVIDER", "jobspy").lower()
-    platforms = [site for site in platforms if site not in {"greenhouse", "lever"}]
+    # Retired boards in saved searches are skipped, not rejected.
+    platforms = [
+        site for site in platforms if site not in {"greenhouse", "lever", "glassdoor"}
+    ]
     if not platforms:
         raise ValueError(
-            "Select at least one supported job board: LinkedIn, Indeed, Glassdoor or SEEK."
+            "Select at least one supported job board: LinkedIn, Indeed, SEEK, Google Jobs or Adzuna."
         )
     search_filters = search_filters or {}
     constrained = (
@@ -558,7 +594,7 @@ def fetch_job_vacancies(
         "screen_pool_factors": {
             site: pool_factor(site)
             for site in platforms
-            if site in {"linkedin", "indeed", "glassdoor"}
+            if site in {"linkedin", "indeed"}
         },
         "policy": "collection-v11-jobspy-descriptions",
         "adaptive": adaptive_config,
@@ -592,12 +628,7 @@ def fetch_job_vacancies(
             )
             key = (
                 (board, "rate-limit")
-                if board
-                and (
-                    "rate-limit" in lowered
-                    or "rate limit" in lowered
-                    or "429" in lowered
-                )
+                if board and board_cooldown.is_rate_limit(message)
                 else message
             )
             if key in reported:
@@ -728,8 +759,12 @@ def _fetch_job_vacancies_uncached(
 
     fetched_jobs = []
     seek_platform_requested = "seek" in [platform.lower() for platform in platforms]
+    # shortcut: Google Jobs and the Adzuna board run only in adaptive (web)
+    # collection; the CLI path skips them (JOB_SEARCH_PROVIDER=adzuna still works there).
     general_platforms = [
-        platform.lower() for platform in platforms if platform.lower() != "seek"
+        platform.lower()
+        for platform in platforms
+        if platform.lower() not in {"seek", "google", "adzuna"}
     ]
 
     print(
@@ -762,9 +797,10 @@ def _fetch_job_vacancies_uncached(
             "results_wanted": limit,
             **({"offset": offset} if offset else {}),
             "is_remote": remote,
-            # Ask JobSpy to include descriptions in its returned postings.
-            # LinkedIn/Glassdoor may perform per-posting requests internally.
-            "fetch_description": True,
+            # Ask JobSpy to include descriptions in its returned postings, except
+            # LinkedIn: JobSpy opens all of a page's jobs back to back, which triggers
+            # HTTP 429, so the app's paced, budgeted detail fetch reads those instead.
+            "fetch_description": site != "linkedin",
             "description_format": "markdown",
         }
         # Indeed cannot combine remote and date filters. Local filtering below
@@ -826,6 +862,7 @@ def _fetch_job_vacancies_uncached(
             adaptive as rounds,
             jobspy_details,
             board_cooldown,
+            google_jobs,
             seek,
         )
         from backend.search.filters import filter_reason, work_arrangement
@@ -842,7 +879,7 @@ def _fetch_job_vacancies_uncached(
                     try:
                         countries = (
                             _jobspy_countries(location, board)
-                            if board in {"indeed", "glassdoor"}
+                            if board == "indeed"
                             else ["usa"]
                         )
                     except ValueError:
@@ -856,6 +893,14 @@ def _fetch_job_vacancies_uncached(
                         streams.append(rounds.Stream(board, query, location, country))
 
         blocked_boards = set()
+        retried_boards = set()
+        # Google Jobs pages by token, not offset: (query, location) -> next page token.
+        google_tokens = {}
+        # Adzuna's free tier allows few calls, so each search makes at most this many.
+        try:
+            adzuna_left = [max(0, int(os.getenv("ADZUNA_MAX_REQUESTS", "2")))]
+        except ValueError:
+            adzuna_left = [2]
 
         def cards(stream, budget):
             if stream.board in blocked_boards:
@@ -866,6 +911,114 @@ def _fetch_job_vacancies_uncached(
                 if on_error:
                     on_error(board_cooldown.message(stream.board))
                 return []
+            if stream.board == "google":
+                key = (stream.query, stream.location)
+                if stream.offset and not google_tokens.get(key):
+                    stream.active = False
+                    return []
+                worldwide = _worldwide([stream.location])
+                country = "" if worldwide else _country_for_location(stream.location)
+                # Skip, without spending a search, a country Google Jobs does not serve.
+                if country in google_jobs.UNSUPPORTED_COUNTRIES:
+                    for item in streams:
+                        if item.board == "google" and item.location == stream.location:
+                            item.active = False
+                    if on_error:
+                        on_error(
+                            f"Google Jobs is not available for {stream.location}: Google does "
+                            f"not offer job search in {country.upper()}. Other boards continue."
+                        )
+                    return []
+                try:
+                    rows, google_tokens[key] = google_jobs.search_page(
+                        stream.query,
+                        "" if worldwide else stream.location,
+                        google_tokens.get(key, ""),
+                        # shortcut: unknown cities fall back to Australia here;
+                        # pass an explicit country if other regions are searched.
+                        country,
+                    )
+                except google_jobs.NoResults as exc:
+                    stream.active = False
+                    if on_error:
+                        on_error(exc.args[0])
+                    return []
+                except google_jobs.GoogleJobsError as exc:
+                    for item in streams:
+                        if item.board == "google":
+                            item.active = False
+                    if on_error:
+                        on_error(exc.args[0])
+                    return []
+                if not google_tokens[key]:
+                    stream.active = False
+                for row in rows:
+                    # Store an absolute date: a cached "3 days ago" would never age.
+                    posted = _parse_posted_at(row["posted_at"])
+                    row.update(
+                        posted_at=posted.isoformat() if posted else "",
+                        requested_location=stream.location,
+                        requested_locations=[stream.location],
+                    )
+                return rows
+            if stream.board == "adzuna":
+                missing = not (os.getenv("ADZUNA_APP_ID") and os.getenv("ADZUNA_APP_KEY"))
+                # Adzuna searches one country index; None means the country is unknown or uncovered.
+                country = (
+                    None
+                    if _worldwide([stream.location])
+                    else _country_for_location(stream.location, default=None)
+                )
+
+                def stop(message, location=None):
+                    for item in streams:
+                        if item.board == "adzuna" and location in (None, item.location):
+                            item.active = False
+                    if on_error:
+                        on_error(message)
+                    return []
+
+                if missing:
+                    return stop(
+                        "Adzuna needs ADZUNA_APP_ID and ADZUNA_APP_KEY in .env; other sources can continue."
+                    )
+                if not adzuna_left[0]:
+                    for item in streams:
+                        if item.board == "adzuna":
+                            item.active = False
+                    return []
+                if country is None:
+                    return stop(
+                        f"Adzuna can't search {stream.location}: it covers only "
+                        + ", ".join(sorted(ADZUNA_COUNTRIES.values()))
+                        + ". Add one of these countries to the location, for example "
+                        "'Berlin, Germany'. Other boards continue.",
+                        stream.location,
+                    )
+                adzuna_left[0] -= 1
+                try:
+                    rows = _adzuna_page(
+                        stream.query,
+                        stream.location,
+                        country,
+                        stream.offset // stream.size + 1,
+                        stream.size,
+                        remote,
+                        posted_days_old,
+                    )
+                except HTTPError as exc:
+                    return stop(
+                        board_cooldown.RateLimitNotice(
+                            "Adzuna rate-limited the request (HTTP 429). Results may be incomplete."
+                        )
+                        if exc.code == 429
+                        else f"Adzuna request failed (HTTP {exc.code}). Other sources can continue."
+                    )
+                except Exception:
+                    return stop("Adzuna could not be reached. Other sources can continue.")
+                for row in rows:
+                    row["requested_locations"] = [stream.location]
+                return rows
             if stream.board == "seek":
 
                 def failure(message):
@@ -898,7 +1051,6 @@ def _fetch_job_vacancies_uncached(
                 {
                     "linkedin": "JobSpy:LinkedIn",
                     "indeed": "JobSpy:Indeed",
-                    "glassdoor": "JobSpy:Glassdoor",
                 }[stream.board]
             )
             logger.addHandler(observer)
@@ -911,6 +1063,23 @@ def _fetch_job_vacancies_uncached(
                     stream.size,
                     stream.offset,
                 )
+                # A rate limit is often brief: pause once, then try this page again
+                # before giving up on the board for the rest of the search.
+                if observer.hit and not rows and stream.board not in retried_boards:
+                    retried_boards.add(stream.board)
+                    deadline = time.monotonic() + RATE_LIMIT_PAUSE_SECONDS
+                    while time.monotonic() < deadline and not budget.stopped():
+                        time.sleep(0.2)
+                    if not budget.stopped():
+                        observer.hit = False
+                        rows = fetch_general(
+                            stream.query,
+                            stream.location,
+                            stream.board,
+                            stream.country,
+                            stream.size,
+                            stream.offset,
+                        )
                 if observer.hit:
                     blocked_boards.add(stream.board)
                     for item in streams:
@@ -924,8 +1093,12 @@ def _fetch_job_vacancies_uncached(
             reason = ""
             if not _location_matches(job.get("location", ""), locations):
                 reason = "location does not match"
-            elif posted_days_old and not _is_recent(
-                job.get("posted_at", ""), posted_days_old
+            # LinkedIn cards carry the original date; its job page has the repost
+            # date, so LinkedIn's age is checked after the page is read.
+            elif (
+                posted_days_old
+                and job.get("source_platform") != "linkedin"
+                and not _is_recent(job.get("posted_at", ""), posted_days_old)
             ):
                 reason = "posted too long ago"
             else:
@@ -940,6 +1113,11 @@ def _fetch_job_vacancies_uncached(
 
         def final(job):
             reason = filter_reason(job, filters)
+            # LinkedIn's date is known only now, from its job page.
+            if not reason and posted_days_old and not _is_recent(
+                job.get("posted_at", ""), posted_days_old
+            ):
+                reason = "posted too long ago"
             if reason:
                 ingestion_log.drop(job, "filter", reason + " (after description)")
             return not reason
@@ -953,27 +1131,27 @@ def _fetch_job_vacancies_uncached(
                 )
             return kept
 
-        glassdoor = jobspy_details.GlassdoorDetails()
-
         def fetch_seek_detail(job, budget):
             try:
                 html = seek._request(job["url"], budget.stopped)
             except seek.SeekError as exc:
-                if "rate-limit" in str(exc):
+                if exc.rate_limited:
                     raise jobspy_details.linkedin_details.RateLimited() from None
                 raise
             return {"description": seek.description(html) if html else ""}
 
         def hydrate(rows, budget):
             for board in dict.fromkeys(job["source_platform"] for job in rows):
+                # Google Jobs and Adzuna rows arrive with their description (Adzuna's is
+                # a snippet); there is no page to fetch.
+                if board in {"google", "adzuna"}:
+                    continue
                 selected = [job for job in rows if job["source_platform"] == board]
                 fetch = None
                 if board == "linkedin":
                     fetch = lambda job: jobspy_details.linkedin_details.fetch_details(
                         jobspy_details.linkedin_details.job_id(job.get("url", ""))
                     )
-                elif board == "glassdoor":
-                    fetch = glassdoor
                 elif board == "seek":
                     fetch = lambda job: fetch_seek_detail(job, budget)
                 wrapped = (
@@ -983,7 +1161,7 @@ def _fetch_job_vacancies_uncached(
                 )
 
                 def detail_error(message):
-                    if "429" in message or "rate-limit" in message.lower():
+                    if board_cooldown.is_rate_limit(message):
                         blocked_boards.add(board)
                     if on_error:
                         on_error(message)
@@ -1035,7 +1213,6 @@ def _fetch_job_vacancies_uncached(
             {
                 "linkedin": "JobSpy:LinkedIn",
                 "indeed": "JobSpy:Indeed",
-                "glassdoor": "JobSpy:Glassdoor",
             }[board]
         )
         logger.addHandler(limited)
@@ -1061,7 +1238,8 @@ def _fetch_job_vacancies_uncached(
                     continue
                 # Only usable, unique jobs consume the shared budget.
                 batch = _filter_requested_locations(batch, locations)
-                batch = _filter_recent_jobs(batch, posted_days_old)
+                if board != "linkedin":
+                    batch = _filter_recent_jobs(batch, posted_days_old)
                 jobs = deduplicate_jobs(jobs + batch)[:budget]
         finally:
             logger.removeHandler(limited)
@@ -1084,7 +1262,7 @@ def _fetch_job_vacancies_uncached(
             try:
                 countries = (
                     _jobspy_countries(location, site)
-                    if site in {"indeed", "glassdoor"}
+                    if site == "indeed"
                     else ["usa"]
                 )
             except ValueError:
@@ -1099,7 +1277,7 @@ def _fetch_job_vacancies_uncached(
                 for country in countries
                 for query in queries
             )
-        if site in {"indeed", "glassdoor", "linkedin"}:
+        if site in {"indeed", "linkedin"}:
             tasks.append((fetch_limited_board, board_searches))
         else:
             tasks.extend((fetch_general, *search) for search in board_searches)

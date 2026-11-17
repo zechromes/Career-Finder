@@ -30,7 +30,7 @@ class JobSpyDetailsTests(unittest.TestCase):
         self.addCleanup(env.stop)
 
     def test_all_boards_screen_before_loading_descriptions(self):
-        for board in ("linkedin", "indeed", "glassdoor"):
+        for board in ("linkedin", "indeed"):
             frame = pd.DataFrame(
                 [
                     {
@@ -55,7 +55,10 @@ class JobSpyDetailsTests(unittest.TestCase):
                     ["Engineer"], ["Sydney"], [board], n_result=1, posted_days_old=0
                 )
             self.assertEqual(scrape.call_args.kwargs["results_wanted"], 3)
-            self.assertTrue(scrape.call_args.kwargs["fetch_description"])
+            # LinkedIn descriptions come from the app's paced fetch, not JobSpy.
+            self.assertEqual(
+                scrape.call_args.kwargs["fetch_description"], board != "linkedin"
+            )
             self.assertEqual(
                 [row["title"] for row in hydrate.call_args.args[1]], ["Engineer"]
             )
@@ -65,7 +68,6 @@ class JobSpyDetailsTests(unittest.TestCase):
         for board, name in [
             ("linkedin", "LinkedIn"),
             ("indeed", "Indeed"),
-            ("glassdoor", "Glassdoor"),
         ]:
 
             def scrape(**kwargs):
@@ -101,20 +103,16 @@ class JobSpyDetailsTests(unittest.TestCase):
         details.hydrate("indeed", [again], cache=self.cache, fetch=fetch)
         self.assertEqual(again["description"], "Indeed inline text")
         fetch.assert_not_called()
-        fetch.return_value = {"description": "Glassdoor text"}
-        details.hydrate(
-            "glassdoor", [{"url": job["url"]}], cache=self.cache, fetch=fetch
-        )
+        fetch.return_value = {"description": "SEEK text"}
+        details.hydrate("seek", [{"url": job["url"]}], cache=self.cache, fetch=fetch)
         fetch.assert_called_once()
 
     def test_detail_429_stops_calls_but_keeps_cached_text(self):
-        self.cache.put("glassdoor:https://example.test/2", {"description": "Cached"})
+        self.cache.put("seek:https://example.test/2", {"description": "Cached"})
         fetch = Mock(side_effect=details.linkedin_details.RateLimited())
         errors = Mock()
         jobs = [{"url": f"https://example.test/{i}"} for i in range(3)]
-        details.hydrate(
-            "glassdoor", jobs, cache=self.cache, fetch=fetch, on_error=errors
-        )
+        details.hydrate("seek", jobs, cache=self.cache, fetch=fetch, on_error=errors)
         fetch.assert_called_once()
         self.assertEqual(jobs[2]["description"], "Cached")
         self.assertTrue(any("429" in call.args[0] for call in errors.call_args_list))
@@ -123,14 +121,14 @@ class JobSpyDetailsTests(unittest.TestCase):
     def test_blocked_cancellation_and_missing_inline_do_not_fetch(self):
         fetch = Mock()
         details.hydrate(
-            "glassdoor",
+            "seek",
             [{"url": "https://example.test/1"}],
             cache=self.cache,
             fetch=fetch,
             allow_network=False,
         )
         details.hydrate(
-            "glassdoor",
+            "seek",
             [{"url": "https://example.test/1"}],
             cache=self.cache,
             fetch=fetch,
@@ -145,28 +143,6 @@ class JobSpyDetailsTests(unittest.TestCase):
             on_error=errors,
         )
         errors.assert_called_once()
-
-    def test_glassdoor_adapter_reuses_session_and_surfaces_status(self):
-        response = Mock(status_code=429)
-        session = Mock()
-        session.post.return_value = response
-        with self.assertRaises(details.linkedin_details.RateLimited):
-            details._CheckedSession(session).post("https://example.test")
-        session.post.assert_called_once_with("https://example.test", timeout=30)
-        with patch("jobspy.glassdoor.Glassdoor") as factory, patch(
-            "jobspy.util.create_session"
-        ):
-            factory.return_value._fetch_job_description.return_value = "Full posting"
-            fetch = details.GlassdoorDetails()
-            job = {
-                "url": "https://www.glassdoor.com.au/job-listing/j?jl=123",
-                "collection_country": "australia",
-                "requested_location": "Sydney",
-            }
-            self.assertEqual(fetch(job)["description"], "Full posting")
-            fetch({**job, "url": "https://www.glassdoor.com.au/job-listing/j?jl=456"})
-            factory.assert_called_once()
-            factory.return_value._get_location.assert_called_once_with("Sydney", False)
 
     def test_incomplete_descriptions_prevent_collection_reuse(self):
         from pathlib import Path
@@ -219,7 +195,7 @@ class JobSpyDetailsTests(unittest.TestCase):
 
     def test_description_progress_distinguishes_cached_ready_and_missing(self):
         self.cache.put(
-            "glassdoor:https://example.test/cached", {"description": "Cached text"}
+            "seek:https://example.test/cached", {"description": "Cached text"}
         )
         rows = [
             {"url": "https://example.test/inline", "description": "Inline text"},
@@ -228,7 +204,7 @@ class JobSpyDetailsTests(unittest.TestCase):
         ]
         statuses = []
         details.hydrate(
-            "glassdoor",
+            "seek",
             rows,
             cache=self.cache,
             fetch=lambda job: {},
@@ -267,6 +243,43 @@ class JobSpyDetailsTests(unittest.TestCase):
             any("screening 1 job titles" in message for message in statuses)
         )
         self.assertIn("1/1 checked, 1 ready (0 cached)", statuses[-1])
+
+    def test_rate_limited_listing_is_retried_once_after_a_pause(self):
+        from backend.search import collection
+
+        calls = []
+
+        def scrape(**kwargs):
+            calls.append(kwargs["site_name"][0])
+            if len(calls) == 1:
+                logging.getLogger("JobSpy:LinkedIn").error("response status code 429")
+                return pd.DataFrame()
+            return pd.DataFrame(
+                [
+                    {
+                        "title": "Engineer",
+                        "description": "Inline text",
+                        "job_url": "https://example.test/after-pause",
+                        "site": "linkedin",
+                    }
+                ]
+            )
+
+        with patch("jobspy.scrape_jobs", side_effect=scrape), patch.object(
+            collection, "RATE_LIMIT_PAUSE_SECONDS", 0
+        ):
+            jobs = fetch_job_vacancies(
+                ["Engineer"],
+                ["Sydney"],
+                ["linkedin"],
+                posted_days_old=0,
+                adaptive=True,
+                on_error=lambda message: None,
+            )
+        self.assertEqual(calls[:2], ["linkedin", "linkedin"])
+        self.assertIn(
+            "https://example.test/after-pause", [job.get("url") for job in jobs]
+        )
 
     def test_rate_limit_allows_immediate_new_searches(self):
         from backend.search import board_cooldown

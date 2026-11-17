@@ -90,9 +90,25 @@ class SeekCollectorTests(unittest.TestCase):
             ),
         ) as request:
             for _ in range(2):
-                with self.assertRaises(seek.SeekError):
+                with self.assertRaises(seek.SeekError) as raised:
                     seek._request("https://www.seek.com.au/", lambda: False)
+                self.assertTrue(raised.exception.rate_limited)
             self.assertEqual(request.call_count, 1)
+
+    def test_block_is_not_reported_as_a_rate_limit(self):
+        with patch.object(seek, "_COOLDOWN", 0), patch.object(
+            seek, "_COOLDOWN_STATUS", 429
+        ), patch.object(seek, "_NEXT_REQUEST", 0), patch.object(
+            seek,
+            "urlopen",
+            side_effect=HTTPError("https://www.seek.com.au/", 403, "blocked", {}, None),
+        ):
+            # Both the first block and the cooldown that follows stay visible errors.
+            for _ in range(2):
+                with self.assertRaises(seek.SeekError) as raised:
+                    seek._request("https://www.seek.com.au/", lambda: False)
+                self.assertFalse(raised.exception.rate_limited)
+                self.assertIn("block", str(raised.exception))
 
     def test_official_domain_redirect_is_accepted(self):
         from urllib.request import Request

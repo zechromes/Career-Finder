@@ -1,57 +1,35 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Career Tracker Job Search API",
+    "title": "Career Finder Job Search API",
     "version": "1.0.0"
   },
   "paths": {
-    "/api/review-datasets": {
-      "get": {
-        "tags": [
-          "Evaluation datasets"
-        ],
-        "summary": "List Datasets",
-        "operationId": "list_datasets_api_review_datasets_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/ReviewDatasetSummary"
-                  },
-                  "type": "array",
-                  "title": "Response List Datasets Api Review Datasets Get"
-                }
-              }
-            }
-          }
-        }
-      },
+    "/api/playground/upload": {
       "post": {
         "tags": [
-          "Evaluation datasets"
+          "Playground"
         ],
-        "summary": "Create Dataset",
-        "operationId": "create_dataset_api_review_datasets_post",
+        "summary": "Upload Stage",
+        "description": "Read a PDF into a profile exactly as an upload does, then check it. One live model call.",
+        "operationId": "upload_stage_api_playground_upload_post",
         "requestBody": {
           "content": {
-            "application/json": {
+            "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/CreateReviewDataset"
+                "$ref": "#/components/schemas/Body_upload_stage_api_playground_upload_post"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "201": {
+          "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReviewBundle"
+                  "$ref": "#/components/schemas/UploadPlayground"
                 }
               }
             }
@@ -69,385 +47,31 @@
         }
       }
     },
-    "/api/review-datasets/{identifier}": {
-      "get": {
-        "tags": [
-          "Evaluation datasets"
-        ],
-        "summary": "Get Dataset",
-        "operationId": "get_dataset_api_review_datasets__identifier__get",
-        "parameters": [
-          {
-            "name": "identifier",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Identifier"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReviewBundle"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "Evaluation datasets"
-        ],
-        "summary": "Delete Dataset",
-        "operationId": "delete_dataset_api_review_datasets__identifier__delete",
-        "parameters": [
-          {
-            "name": "identifier",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Identifier"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/review-datasets/{identifier}/jobs/{job_id}": {
-      "put": {
-        "tags": [
-          "Evaluation datasets"
-        ],
-        "summary": "Save Review",
-        "operationId": "save_review_api_review_datasets__identifier__jobs__job_id__put",
-        "parameters": [
-          {
-            "name": "identifier",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Identifier"
-            }
-          },
-          {
-            "name": "job_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Job Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SaveReview"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReviewState"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/review-datasets/{identifier}/metrics": {
-      "get": {
-        "tags": [
-          "Evaluation datasets"
-        ],
-        "summary": "Metrics",
-        "operationId": "metrics_api_review_datasets__identifier__metrics_get",
-        "parameters": [
-          {
-            "name": "identifier",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Identifier"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReviewMetrics"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/review-datasets/{identifier}/replay": {
+    "/api/playground/ingestion": {
       "post": {
         "tags": [
-          "Evaluation datasets"
+          "Playground"
         ],
-        "summary": "Replay",
-        "operationId": "replay_api_review_datasets__identifier__replay_post",
-        "parameters": [
-          {
-            "name": "identifier",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Identifier"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReplayResult"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/experiments/options": {
-      "get": {
-        "tags": [
-          "Experiments"
-        ],
-        "summary": "Options",
-        "operationId": "options_api_experiments_options_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ExperimentOptions"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/experiments/sources": {
-      "get": {
-        "tags": [
-          "Experiments"
-        ],
-        "summary": "Sources",
-        "operationId": "sources_api_experiments_sources_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/ExperimentSource"
-                  },
-                  "type": "array",
-                  "title": "Response Sources Api Experiments Sources Get"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/experiments/sources/{source_id}": {
-      "get": {
-        "tags": [
-          "Experiments"
-        ],
-        "summary": "Dataset",
-        "operationId": "dataset_api_experiments_sources__source_id__get",
-        "parameters": [
-          {
-            "name": "source_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Source Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ExperimentDataset"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/experiments": {
-      "post": {
-        "tags": [
-          "Experiments"
-        ],
-        "summary": "Start",
-        "operationId": "start_api_experiments_post",
+        "summary": "Ingestion Stage",
+        "description": "Collect jobs live from the boards, bypassing the cache. Nothing reaches a search.\n\nshortcut: runs inside the request (up to the collection time limit) with no\ncancel; move to a background job if runs need stopping.",
+        "operationId": "ingestion_stage_api_playground_ingestion_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ExperimentRequest"
+                "$ref": "#/components/schemas/Preferences"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "202": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ExperimentResult"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/experiments/{experiment_id}": {
-      "get": {
-        "tags": [
-          "Experiments"
-        ],
-        "summary": "Result",
-        "operationId": "result_api_experiments__experiment_id__get",
-        "parameters": [
-          {
-            "name": "experiment_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Experiment Id"
-            }
-          }
-        ],
-        "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ExperimentResult"
+                  "$ref": "#/components/schemas/IngestionPlayground"
                 }
               }
             }
@@ -465,31 +89,31 @@
         }
       }
     },
-    "/api/experiments/{experiment_id}/cancel": {
+    "/api/playground/retrieval": {
       "post": {
         "tags": [
-          "Experiments"
+          "Playground"
         ],
-        "summary": "Cancel",
-        "operationId": "cancel_api_experiments__experiment_id__cancel_post",
-        "parameters": [
-          {
-            "name": "experiment_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Experiment Id"
+        "summary": "Retrieval Stage",
+        "description": "Rank given jobs against a profile as a real search does, in a throwaway index.\n\nLive OpenAI embedding calls; vectors come from the shared embedding cache when present.",
+        "operationId": "retrieval_stage_api_playground_retrieval_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetrievalRequest"
+              }
             }
-          }
-        ],
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ExperimentResult"
+                  "$ref": "#/components/schemas/RetrievalPlayground"
                 }
               }
             }
@@ -858,6 +482,55 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/JobActions"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/searches/{run_id}/tailored-resume": {
+      "post": {
+        "summary": "Create Tailored Resume",
+        "operationId": "create_tailored_resume_api_searches__run_id__tailored_resume_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TailoredResumeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TailoredResume"
                 }
               }
             }
@@ -1395,6 +1068,132 @@
         }
       }
     },
+    "/api/settings/keys": {
+      "get": {
+        "summary": "Get Api Keys",
+        "operationId": "get_api_keys_api_settings_keys_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ApiKeyStatus"
+                  },
+                  "type": "array",
+                  "title": "Response Get Api Keys Api Settings Keys Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings/keys/{provider}": {
+      "put": {
+        "summary": "Save Api Key",
+        "operationId": "save_api_key_api_settings_keys__provider__put",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "openai",
+                "anthropic",
+                "google"
+              ],
+              "type": "string",
+              "title": "Provider"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiKeyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApiKeyStatus"
+                  },
+                  "title": "Response Save Api Key Api Settings Keys  Provider  Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove Api Key",
+        "operationId": "remove_api_key_api_settings_keys__provider__delete",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "openai",
+                "anthropic",
+                "google"
+              ],
+              "type": "string",
+              "title": "Provider"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApiKeyStatus"
+                  },
+                  "title": "Response Remove Api Key Api Settings Keys  Provider  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "summary": "Index",
@@ -1526,28 +1325,59 @@
   },
   "components": {
     "schemas": {
-      "BoardCount": {
+      "ApiKeyInput": {
         "properties": {
-          "board": {
+          "api_key": {
             "type": "string",
-            "title": "Board"
+            "maxLength": 500,
+            "title": "Api Key"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "api_key"
+        ],
+        "title": "ApiKeyInput"
+      },
+      "ApiKeyStatus": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider"
           },
-          "collected": {
-            "type": "integer",
-            "title": "Collected"
+          "label": {
+            "type": "string",
+            "title": "Label"
           },
-          "dropped": {
-            "type": "integer",
-            "title": "Dropped"
+          "source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "settings",
+                  "env"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "hint": {
+            "type": "string",
+            "title": "Hint"
           }
         },
         "type": "object",
         "required": [
-          "board",
-          "collected",
-          "dropped"
+          "provider",
+          "label",
+          "source",
+          "hint"
         ],
-        "title": "BoardCount"
+        "title": "ApiKeyStatus"
       },
       "Body_start_job_search": {
         "properties": {
@@ -1563,7 +1393,7 @@
           "platforms": {
             "type": "string",
             "title": "Platforms",
-            "default": "linkedin,indeed,glassdoor"
+            "default": "linkedin,indeed"
           },
           "remote": {
             "type": "boolean",
@@ -1618,60 +1448,19 @@
         ],
         "title": "Body_upload_resume"
       },
-      "CreateReviewDataset": {
+      "Body_upload_stage_api_playground_upload_post": {
         "properties": {
-          "source_id": {
+          "resume": {
             "type": "string",
-            "pattern": "^[a-f0-9]{32}$",
-            "title": "Source Id"
+            "contentMediaType": "application/octet-stream",
+            "title": "Resume"
           }
         },
-        "additionalProperties": false,
         "type": "object",
         "required": [
-          "source_id"
+          "resume"
         ],
-        "title": "CreateReviewDataset"
-      },
-      "CriterionReview": {
-        "properties": {
-          "correct": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Correct"
-          },
-          "importance": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "must_have",
-                  "nice_to_have",
-                  "unclear"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Importance"
-          },
-          "notes": {
-            "type": "string",
-            "maxLength": 3000,
-            "title": "Notes",
-            "default": ""
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "CriterionReview"
+        "title": "Body_upload_stage_api_playground_upload_post"
       },
       "DismissalInput": {
         "properties": {
@@ -1824,12 +1613,36 @@
         ],
         "title": "DismissalPreference"
       },
+      "DropCount": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "board": {
+            "type": "string",
+            "title": "Board"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage",
+          "reason",
+          "board",
+          "count"
+        ],
+        "title": "DropCount"
+      },
       "DroppedJob": {
         "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
           "title": {
             "type": "string",
             "title": "Title"
@@ -1842,13 +1655,14 @@
             "type": "string",
             "title": "Location"
           },
-          "url": {
-            "type": "string",
-            "title": "Url"
-          },
           "board": {
             "type": "string",
             "title": "Board"
+          },
+          "posted_at": {
+            "type": "string",
+            "title": "Posted At",
+            "default": ""
           },
           "stage": {
             "type": "string",
@@ -1858,107 +1672,78 @@
             "type": "string",
             "title": "Reason"
           },
-          "description": {
-            "type": "string",
-            "title": "Description"
-          },
-          "duplicate_of": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/DuplicateOf"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "title",
-          "company",
-          "location",
-          "url",
-          "board",
-          "stage",
-          "reason",
-          "description"
-        ],
-        "title": "DroppedJob"
-      },
-      "DuplicateMetrics": {
-        "properties": {
-          "recorded": {
-            "type": "integer",
-            "title": "Recorded"
-          },
-          "judged": {
-            "type": "integer",
-            "title": "Judged"
-          },
-          "same": {
-            "type": "integer",
-            "title": "Same"
-          },
-          "precision": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Precision"
-          }
-        },
-        "type": "object",
-        "required": [
-          "recorded",
-          "judged",
-          "same",
-          "precision"
-        ],
-        "title": "DuplicateMetrics"
-      },
-      "DuplicateOf": {
-        "properties": {
-          "title": {
-            "type": "string",
-            "title": "Title"
-          },
-          "company": {
-            "type": "string",
-            "title": "Company"
-          },
           "url": {
             "type": "string",
             "title": "Url"
-          },
-          "board": {
-            "type": "string",
-            "title": "Board"
-          },
-          "description": {
-            "type": "string",
-            "title": "Description"
-          },
-          "method": {
-            "type": "string",
-            "title": "Method"
           }
         },
         "type": "object",
         "required": [
           "title",
           "company",
-          "url",
+          "location",
           "board",
-          "description",
-          "method"
+          "stage",
+          "reason",
+          "url"
         ],
-        "title": "DuplicateOf"
+        "title": "DroppedJob"
+      },
+      "EntryEvidence": {
+        "properties": {
+          "entry": {
+            "type": "string",
+            "title": "Entry",
+            "description": "One work_history, sections or education entry, copied exactly as written there."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "job",
+              "internship",
+              "project",
+              "hackathon",
+              "education",
+              "other"
+            ],
+            "title": "Type",
+            "description": "What kind of experience the entry is. Paid employment is 'job'; personal, academic or employer-unspecified projects are 'project'.",
+            "default": "other"
+          },
+          "end": {
+            "type": "string",
+            "title": "End",
+            "description": "When the entry ended as YYYY-MM, 'present' if ongoing, or empty if the entry gives no date.",
+            "default": ""
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "description": "One sentence written like a job-posting responsibility, using only what the entry says. No company, product or award names, dates, money figures, or notes such as 'context not specified'.",
+            "default": ""
+          },
+          "hard_skills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Hard Skills",
+            "description": "Programming languages, frameworks, libraries, platforms, tools and techniques the entry shows were used, named the way job postings list requirements. Include the language a named framework or library is written in. Leave out features or results of what was built, metrics and task descriptions, and anything the entry does not support."
+          },
+          "soft_skills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Soft Skills",
+            "description": "Soft skills the entry shows through a described action, each named with the common term job postings use (for example 'Mentoring' for 'mentored two interns'), not a coined phrase. Never list one without such an action."
+          }
+        },
+        "type": "object",
+        "required": [
+          "entry"
+        ],
+        "title": "EntryEvidence"
       },
       "EvaluationError": {
         "properties": {
@@ -2006,530 +1791,6 @@
         "type": "object",
         "title": "EvaluationError"
       },
-      "EvidenceMetrics": {
-        "properties": {
-          "total": {
-            "type": "integer",
-            "title": "Total"
-          },
-          "reviewed": {
-            "type": "integer",
-            "title": "Reviewed"
-          },
-          "supported": {
-            "type": "integer",
-            "title": "Supported"
-          },
-          "unsupported": {
-            "type": "integer",
-            "title": "Unsupported"
-          },
-          "uncertain": {
-            "type": "integer",
-            "title": "Uncertain"
-          },
-          "verdict_reviewed": {
-            "type": "integer",
-            "title": "Verdict Reviewed"
-          },
-          "verdict_correct": {
-            "type": "integer",
-            "title": "Verdict Correct"
-          },
-          "quotes_found": {
-            "type": "integer",
-            "title": "Quotes Found"
-          },
-          "review_coverage": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Review Coverage"
-          },
-          "support_rate": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Support Rate"
-          },
-          "verdict_accuracy": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Verdict Accuracy"
-          }
-        },
-        "type": "object",
-        "required": [
-          "total",
-          "reviewed",
-          "supported",
-          "unsupported",
-          "uncertain",
-          "verdict_reviewed",
-          "verdict_correct",
-          "quotes_found",
-          "review_coverage",
-          "support_rate",
-          "verdict_accuracy"
-        ],
-        "title": "EvidenceMetrics"
-      },
-      "EvidenceReview": {
-        "properties": {
-          "support": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "supported",
-                  "unsupported",
-                  "uncertain"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Support"
-          },
-          "verdict": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "met",
-                  "partial",
-                  "not_met",
-                  "unknown"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Verdict"
-          },
-          "notes": {
-            "type": "string",
-            "maxLength": 3000,
-            "title": "Notes",
-            "default": ""
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "EvidenceReview"
-      },
-      "ExperimentDataset": {
-        "properties": {
-          "source_id": {
-            "type": "string",
-            "title": "Source Id"
-          },
-          "fingerprint": {
-            "type": "string",
-            "title": "Fingerprint"
-          },
-          "scope": {
-            "type": "string",
-            "title": "Scope"
-          },
-          "jobs": {
-            "items": {
-              "$ref": "#/components/schemas/ExperimentJob"
-            },
-            "type": "array",
-            "title": "Jobs"
-          }
-        },
-        "type": "object",
-        "required": [
-          "source_id",
-          "fingerprint",
-          "scope",
-          "jobs"
-        ],
-        "title": "ExperimentDataset"
-      },
-      "ExperimentJob": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "title": {
-            "type": "string",
-            "title": "Title"
-          },
-          "company": {
-            "type": "string",
-            "title": "Company",
-            "default": ""
-          },
-          "description": {
-            "type": "string",
-            "title": "Description"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "title",
-          "description"
-        ],
-        "title": "ExperimentJob"
-      },
-      "ExperimentMetrics": {
-        "properties": {
-          "label_coverage": {
-            "type": "number",
-            "title": "Label Coverage"
-          },
-          "observed_recall_at_k": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Observed Recall At K"
-          },
-          "precision_on_labeled": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Precision On Labeled"
-          },
-          "missed_labeled_positives": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Missed Labeled Positives"
-          },
-          "unlabeled_selected": {
-            "type": "integer",
-            "title": "Unlabeled Selected",
-            "default": 0
-          }
-        },
-        "type": "object",
-        "required": [
-          "label_coverage"
-        ],
-        "title": "ExperimentMetrics"
-      },
-      "ExperimentModel": {
-        "properties": {
-          "value": {
-            "type": "string",
-            "title": "Value"
-          },
-          "label": {
-            "type": "string",
-            "title": "Label"
-          },
-          "model_id": {
-            "type": "string",
-            "title": "Model Id"
-          }
-        },
-        "type": "object",
-        "required": [
-          "value",
-          "label",
-          "model_id"
-        ],
-        "title": "ExperimentModel"
-      },
-      "ExperimentOptions": {
-        "properties": {
-          "generation_models": {
-            "items": {
-              "$ref": "#/components/schemas/ExperimentModel"
-            },
-            "type": "array",
-            "title": "Generation Models"
-          },
-          "embedding_models": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Embedding Models"
-          }
-        },
-        "type": "object",
-        "required": [
-          "generation_models",
-          "embedding_models"
-        ],
-        "title": "ExperimentOptions"
-      },
-      "ExperimentRequest": {
-        "properties": {
-          "source_id": {
-            "type": "string",
-            "pattern": "^[a-f0-9]{32}$",
-            "title": "Source Id"
-          },
-          "fingerprint": {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$",
-            "title": "Fingerprint"
-          },
-          "phase": {
-            "type": "string",
-            "enum": [
-              "retrieval",
-              "generation",
-              "both"
-            ],
-            "title": "Phase",
-            "default": "both"
-          },
-          "embedding_models": {
-            "items": {
-              "type": "string",
-              "enum": [
-                "text-embedding-3-small",
-                "text-embedding-3-large"
-              ]
-            },
-            "type": "array",
-            "maxItems": 2,
-            "title": "Embedding Models"
-          },
-          "providers": {
-            "items": {
-              "type": "string",
-              "enum": [
-                "claude",
-                "gpt",
-                "gemini"
-              ]
-            },
-            "type": "array",
-            "maxItems": 3,
-            "title": "Providers"
-          },
-          "top_k": {
-            "type": "integer",
-            "maximum": 20.0,
-            "minimum": 1.0,
-            "title": "Top K",
-            "default": 5
-          },
-          "labels": {
-            "additionalProperties": {
-              "type": "boolean"
-            },
-            "type": "object",
-            "maxProperties": 500,
-            "title": "Labels"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "source_id",
-          "fingerprint"
-        ],
-        "title": "ExperimentRequest"
-      },
-      "ExperimentResult": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "running",
-              "complete",
-              "partial",
-              "failed",
-              "cancelled"
-            ],
-            "title": "Status"
-          },
-          "source_id": {
-            "type": "string",
-            "title": "Source Id"
-          },
-          "created_at": {
-            "type": "number",
-            "title": "Created At"
-          },
-          "fingerprint": {
-            "type": "string",
-            "title": "Fingerprint"
-          },
-          "scope": {
-            "type": "string",
-            "title": "Scope"
-          },
-          "phase": {
-            "type": "string",
-            "title": "Phase"
-          },
-          "top_k": {
-            "type": "integer",
-            "title": "Top K"
-          },
-          "pool_size": {
-            "type": "integer",
-            "title": "Pool Size"
-          },
-          "settings": {
-            "$ref": "#/components/schemas/ExperimentRequest"
-          },
-          "message": {
-            "type": "string",
-            "title": "Message"
-          },
-          "retrieval": {
-            "items": {
-              "$ref": "#/components/schemas/RetrievalTrial"
-            },
-            "type": "array",
-            "title": "Retrieval"
-          },
-          "generation": {
-            "items": {
-              "$ref": "#/components/schemas/GenerationTrial"
-            },
-            "type": "array",
-            "title": "Generation"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "status",
-          "source_id",
-          "created_at",
-          "fingerprint",
-          "scope",
-          "phase",
-          "top_k",
-          "pool_size",
-          "settings",
-          "message"
-        ],
-        "title": "ExperimentResult"
-      },
-      "ExperimentSource": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "job_count": {
-            "type": "integer",
-            "title": "Job Count"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "name",
-          "job_count"
-        ],
-        "title": "ExperimentSource"
-      },
-      "ExtractionMetrics": {
-        "properties": {
-          "total": {
-            "type": "integer",
-            "title": "Total"
-          },
-          "reviewed": {
-            "type": "integer",
-            "title": "Reviewed"
-          },
-          "precision": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Precision"
-          },
-          "importance_accuracy": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Importance Accuracy"
-          },
-          "completeness_reviewed_jobs": {
-            "type": "integer",
-            "title": "Completeness Reviewed Jobs"
-          },
-          "missed_requirements": {
-            "type": "integer",
-            "title": "Missed Requirements"
-          },
-          "recall_on_complete_reviews": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Recall On Complete Reviews"
-          }
-        },
-        "type": "object",
-        "required": [
-          "total",
-          "reviewed",
-          "precision",
-          "importance_accuracy",
-          "completeness_reviewed_jobs",
-          "missed_requirements",
-          "recall_on_complete_reviews"
-        ],
-        "title": "ExtractionMetrics"
-      },
       "FindMoreRequest": {
         "properties": {
           "preferences": {
@@ -2541,118 +1802,6 @@
           "preferences"
         ],
         "title": "FindMoreRequest"
-      },
-      "GenerationMetrics": {
-        "properties": {
-          "model": {
-            "type": "string",
-            "title": "Model"
-          },
-          "assessed": {
-            "type": "integer",
-            "title": "Assessed"
-          },
-          "failed": {
-            "type": "integer",
-            "title": "Failed"
-          },
-          "human_good": {
-            "$ref": "#/components/schemas/VerdictCounts"
-          },
-          "human_not_fit": {
-            "$ref": "#/components/schemas/VerdictCounts"
-          },
-          "strong_match_precision": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Strong Match Precision"
-          },
-          "good_fit_recall": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Good Fit Recall"
-          },
-          "good_fits_rejected": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Good Fits Rejected"
-          }
-        },
-        "type": "object",
-        "required": [
-          "model",
-          "assessed",
-          "failed",
-          "human_good",
-          "human_not_fit",
-          "strong_match_precision",
-          "good_fit_recall",
-          "good_fits_rejected"
-        ],
-        "title": "GenerationMetrics"
-      },
-      "GenerationTrial": {
-        "properties": {
-          "provider": {
-            "type": "string",
-            "title": "Provider"
-          },
-          "model": {
-            "type": "string",
-            "title": "Model"
-          },
-          "seconds": {
-            "type": "number",
-            "title": "Seconds"
-          },
-          "input_ids": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Input Ids"
-          },
-          "results": {
-            "items": {
-              "$ref": "#/components/schemas/JobResult"
-            },
-            "type": "array",
-            "title": "Results"
-          },
-          "errors": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Errors"
-          },
-          "metrics": {
-            "$ref": "#/components/schemas/ExperimentMetrics"
-          }
-        },
-        "type": "object",
-        "required": [
-          "provider",
-          "model",
-          "seconds",
-          "input_ids",
-          "metrics"
-        ],
-        "title": "GenerationTrial"
       },
       "HTTPValidationError": {
         "properties": {
@@ -2667,120 +1816,18 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
-      "IngestionCount": {
+      "IngestionPlayground": {
         "properties": {
-          "stage": {
+          "status": {
             "type": "string",
-            "title": "Stage"
+            "title": "Status"
           },
-          "reason": {
-            "type": "string",
-            "title": "Reason"
-          },
-          "board": {
-            "type": "string",
-            "title": "Board"
-          },
-          "count": {
-            "type": "integer",
-            "title": "Count"
-          }
-        },
-        "type": "object",
-        "required": [
-          "stage",
-          "reason",
-          "board",
-          "count"
-        ],
-        "title": "IngestionCount"
-      },
-      "IngestionMetrics": {
-        "properties": {
-          "available": {
-            "type": "boolean",
-            "title": "Available"
-          },
-          "complete": {
-            "type": "boolean",
-            "title": "Complete"
-          },
-          "searches": {
-            "type": "integer",
-            "title": "Searches"
-          },
-          "collected": {
-            "type": "integer",
-            "title": "Collected"
-          },
-          "kept": {
-            "type": "integer",
-            "title": "Kept"
-          },
-          "omitted": {
-            "type": "integer",
-            "title": "Omitted"
-          },
-          "by_reason": {
+          "messages": {
             "items": {
-              "$ref": "#/components/schemas/ReasonCount"
+              "type": "string"
             },
             "type": "array",
-            "title": "By Reason"
-          },
-          "by_board": {
-            "items": {
-              "$ref": "#/components/schemas/BoardCount"
-            },
-            "type": "array",
-            "title": "By Board"
-          },
-          "dropped_recorded": {
-            "type": "integer",
-            "title": "Dropped Recorded"
-          },
-          "labeled": {
-            "type": "integer",
-            "title": "Labeled"
-          },
-          "good_fits": {
-            "type": "integer",
-            "title": "Good Fits"
-          },
-          "duplicates": {
-            "$ref": "#/components/schemas/DuplicateMetrics"
-          },
-          "search_text": {
-            "$ref": "#/components/schemas/SearchTextMetrics"
-          }
-        },
-        "type": "object",
-        "required": [
-          "available",
-          "complete",
-          "searches",
-          "collected",
-          "kept",
-          "omitted",
-          "by_reason",
-          "by_board",
-          "dropped_recorded",
-          "labeled",
-          "good_fits",
-          "duplicates",
-          "search_text"
-        ],
-        "title": "IngestionMetrics"
-      },
-      "IngestionRecord": {
-        "properties": {
-          "searches": {
-            "type": "integer",
-            "title": "Searches"
-          },
-          "complete": {
-            "type": "boolean",
-            "title": "Complete"
+            "title": "Messages"
           },
           "collected": {
             "additionalProperties": {
@@ -2789,32 +1836,38 @@
             "type": "object",
             "title": "Collected"
           },
-          "kept": {
-            "type": "integer",
-            "title": "Kept"
-          },
           "counts": {
             "items": {
-              "$ref": "#/components/schemas/IngestionCount"
+              "$ref": "#/components/schemas/DropCount"
             },
             "type": "array",
             "title": "Counts"
           },
-          "omitted": {
-            "type": "integer",
-            "title": "Omitted"
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/PlaygroundJob"
+            },
+            "type": "array",
+            "title": "Jobs"
+          },
+          "dropped": {
+            "items": {
+              "$ref": "#/components/schemas/DroppedJob"
+            },
+            "type": "array",
+            "title": "Dropped"
           }
         },
         "type": "object",
         "required": [
-          "searches",
-          "complete",
+          "status",
+          "messages",
           "collected",
-          "kept",
           "counts",
-          "omitted"
+          "jobs",
+          "dropped"
         ],
-        "title": "IngestionRecord"
+        "title": "IngestionPlayground"
       },
       "JobActionUpdate": {
         "properties": {
@@ -2888,6 +1941,16 @@
       },
       "JobResult": {
         "properties": {
+          "tailored_resume": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TailoredResume"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "completed_models": {
             "type": "integer",
             "title": "Completed Models",
@@ -2897,6 +1960,17 @@
             "type": "integer",
             "title": "Agreement Count",
             "default": 0
+          },
+          "shortlist_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shortlist Rank"
           },
           "provisional_score": {
             "anyOf": [
@@ -3134,136 +2208,6 @@
         ],
         "title": "JobResult"
       },
-      "JobReview": {
-        "properties": {
-          "fit": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "strong_match",
-                  "review",
-                  "not_suitable"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Fit"
-          },
-          "ai_assisted": {
-            "type": "boolean",
-            "title": "Ai Assisted",
-            "default": false
-          },
-          "duplicate_correct": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Duplicate Correct"
-          },
-          "notes": {
-            "type": "string",
-            "maxLength": 5000,
-            "title": "Notes",
-            "default": ""
-          },
-          "extraction_complete": {
-            "type": "boolean",
-            "title": "Extraction Complete",
-            "default": false
-          },
-          "criteria": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/CriterionReview"
-            },
-            "type": "object",
-            "maxProperties": 500,
-            "title": "Criteria"
-          },
-          "missing_requirements": {
-            "items": {
-              "$ref": "#/components/schemas/MissingRequirement"
-            },
-            "type": "array",
-            "maxItems": 100,
-            "title": "Missing Requirements"
-          },
-          "evidence": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/EvidenceReview"
-            },
-            "type": "object",
-            "maxProperties": 1500,
-            "title": "Evidence"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "JobReview"
-      },
-      "MissedJob": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "title": {
-            "type": "string",
-            "title": "Title"
-          },
-          "experienced_title": {
-            "type": "boolean",
-            "title": "Experienced Title"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "title",
-          "experienced_title"
-        ],
-        "title": "MissedJob"
-      },
-      "MissingRequirement": {
-        "properties": {
-          "requirement": {
-            "type": "string",
-            "maxLength": 3000,
-            "minLength": 1,
-            "title": "Requirement"
-          },
-          "job_quote": {
-            "type": "string",
-            "maxLength": 10000,
-            "minLength": 1,
-            "title": "Job Quote"
-          },
-          "importance": {
-            "type": "string",
-            "enum": [
-              "must_have",
-              "nice_to_have",
-              "unclear"
-            ],
-            "title": "Importance"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "requirement",
-          "job_quote",
-          "importance"
-        ],
-        "title": "MissingRequirement"
-      },
       "ModelEvaluation": {
         "properties": {
           "provider": {
@@ -3281,7 +2225,8 @@
             "enum": [
               "pending",
               "complete",
-              "failed"
+              "failed",
+              "skipped"
             ],
             "title": "Status",
             "default": "pending"
@@ -3315,6 +2260,11 @@
           "rationale": {
             "type": "string",
             "title": "Rationale",
+            "default": ""
+          },
+          "rule_exception": {
+            "type": "string",
+            "title": "Rule Exception",
             "default": ""
           },
           "mismatch_reason": {
@@ -3407,45 +2357,53 @@
         ],
         "title": "ModelOption"
       },
-      "ModelVerdict": {
+      "PlaygroundJob": {
         "properties": {
-          "model": {
+          "title": {
             "type": "string",
-            "title": "Model",
+            "title": "Title"
+          },
+          "company": {
+            "type": "string",
+            "title": "Company"
+          },
+          "location": {
+            "type": "string",
+            "title": "Location"
+          },
+          "board": {
+            "type": "string",
+            "title": "Board"
+          },
+          "posted_at": {
+            "type": "string",
+            "title": "Posted At"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "description_chars": {
+            "type": "integer",
+            "title": "Description Chars"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
             "default": ""
-          },
-          "status": {
-            "type": "string",
-            "title": "Status"
-          },
-          "fit_category": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Fit Category"
-          },
-          "score": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Score"
           }
         },
         "type": "object",
         "required": [
-          "status"
+          "title",
+          "company",
+          "location",
+          "board",
+          "posted_at",
+          "url",
+          "description_chars"
         ],
-        "title": "ModelVerdict"
+        "title": "PlaygroundJob"
       },
       "Preferences": {
         "properties": {
@@ -3472,8 +2430,9 @@
               "enum": [
                 "linkedin",
                 "indeed",
-                "glassdoor",
-                "seek"
+                "seek",
+                "google",
+                "adzuna"
               ]
             },
             "type": "array",
@@ -3527,9 +2486,9 @@
           "top_k": {
             "type": "integer",
             "maximum": 10000.0,
-            "minimum": 0.0,
+            "minimum": -1.0,
             "title": "Top K",
-            "default": 50
+            "default": -1
           },
           "evaluation_model": {
             "type": "string",
@@ -3564,155 +2523,59 @@
         ],
         "title": "ProfileConfirmation"
       },
-      "ReasonCount": {
+      "RankedJob": {
         "properties": {
-          "stage": {
+          "rank": {
+            "type": "integer",
+            "title": "Rank"
+          },
+          "title": {
             "type": "string",
-            "title": "Stage"
+            "title": "Title"
           },
-          "reason": {
+          "company": {
             "type": "string",
-            "title": "Reason"
+            "title": "Company"
           },
-          "count": {
-            "type": "integer",
-            "title": "Count"
+          "location": {
+            "type": "string",
+            "title": "Location"
           },
-          "labeled": {
-            "type": "integer",
-            "title": "Labeled"
+          "board": {
+            "type": "string",
+            "title": "Board"
           },
-          "good_fits": {
-            "type": "integer",
-            "title": "Good Fits"
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "above_level": {
+            "type": "boolean",
+            "title": "Above Level"
           }
         },
         "type": "object",
         "required": [
-          "stage",
-          "reason",
-          "count",
-          "labeled",
-          "good_fits"
+          "rank",
+          "title",
+          "company",
+          "location",
+          "board",
+          "url",
+          "above_level"
         ],
-        "title": "ReasonCount"
-      },
-      "ReplayResult": {
-        "properties": {
-          "dataset_id": {
-            "type": "string",
-            "title": "Dataset Id"
-          },
-          "embedding_model": {
-            "type": "string",
-            "title": "Embedding Model"
-          },
-          "ranked_at": {
-            "type": "number",
-            "title": "Ranked At"
-          },
-          "searches": {
-            "type": "integer",
-            "title": "Searches"
-          },
-          "top_k": {
-            "type": "integer",
-            "title": "Top K"
-          },
-          "unranked": {
-            "type": "integer",
-            "title": "Unranked"
-          },
-          "rules": {
-            "items": {
-              "$ref": "#/components/schemas/ReplayRule"
-            },
-            "type": "array",
-            "title": "Rules"
-          },
-          "limitations": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Limitations"
-          }
-        },
-        "type": "object",
-        "required": [
-          "dataset_id",
-          "embedding_model",
-          "ranked_at",
-          "searches",
-          "top_k",
-          "unranked",
-          "rules",
-          "limitations"
-        ],
-        "title": "ReplayResult"
-      },
-      "ReplayRule": {
-        "properties": {
-          "rule": {
-            "type": "string",
-            "title": "Rule"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "shortlist_size": {
-            "type": "integer",
-            "title": "Shortlist Size"
-          },
-          "matches_original": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Matches Original"
-          },
-          "metrics": {
-            "$ref": "#/components/schemas/ExperimentMetrics"
-          },
-          "good_fits_added": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Good Fits Added"
-          },
-          "not_fits_added": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Not Fits Added"
-          },
-          "unassessed_added": {
-            "type": "integer",
-            "title": "Unassessed Added"
-          }
-        },
-        "type": "object",
-        "required": [
-          "rule",
-          "name",
-          "shortlist_size",
-          "matches_original",
-          "metrics",
-          "good_fits_added",
-          "not_fits_added",
-          "unassessed_added"
-        ],
-        "title": "ReplayRule"
+        "title": "RankedJob"
       },
       "ResumeProfile": {
         "properties": {
+          "section_headings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Section Headings",
+            "description": "Every section heading in the resume, in order, exactly as written. List them before filling the other fields so no section is skipped."
+          },
           "name": {
             "type": "string",
             "title": "Name",
@@ -3737,6 +2600,14 @@
             "type": "array",
             "title": "Education"
           },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/ResumeSection"
+            },
+            "type": "array",
+            "title": "Sections",
+            "description": "Every other resume section under its own heading, for example Projects, Certifications, Publications, Volunteering, Awards, Research, Leadership or Languages. Leave out what is already in work_history, education, skills or the summary, and contact details. Evidence of skills, never of employment years."
+          },
           "tech_skills": {
             "items": {
               "type": "string"
@@ -3745,6 +2616,22 @@
             "title": "Tech Skills",
             "description": "List of Familiar Programming Languages or Frameworks (e.g. Python, C++, JavaScript, Java, ReactJS, NodeJS)"
           },
+          "skill_groups": {
+            "items": {
+              "$ref": "#/components/schemas/SkillGroup"
+            },
+            "type": "array",
+            "title": "Skill Groups",
+            "description": "Every tech_skills entry placed in exactly one group of related skills, so each group describes one kind of work."
+          },
+          "keyword_queries": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Keyword Queries",
+            "description": "One or two lines of 6-12 space-separated terms from tech_skills for exact matching against job ads, most important first, for example 'Python FastAPI React PostgreSQL Docker'. Use names employers list; no soft skills, no terms the resume does not support."
+          },
           "soft_skills": {
             "items": {
               "type": "string"
@@ -3752,6 +2639,14 @@
             "type": "array",
             "title": "Soft Skills",
             "description": "List of Soft skills (e.g. Responsibility, Curiosity, Leadership)"
+          },
+          "entry_evidence": {
+            "items": {
+              "$ref": "#/components/schemas/EntryEvidence"
+            },
+            "type": "array",
+            "title": "Entry Evidence",
+            "description": "One item per work_history, sections and education entry: what was done there and the hard and soft skills it demonstrates."
           },
           "years_of_experience": {
             "anyOf": [
@@ -3794,497 +2689,161 @@
             },
             "type": "array",
             "title": "Preferred Domains",
-            "description": "Domain of Interest (e.g. AI Engineer, Software Engineer, Full Stack Web Developer)"
+            "description": "Three to six realistic job titles to search for now, inferred from the whole resume (work history, sections, education and skills) at the candidate's career level, for example 'Graduate Data Analyst' or 'Junior Python Developer', including common variants employers use for the same work. Include a stated interest only when the resume supports it."
+          },
+          "target_roles_reason": {
+            "type": "string",
+            "title": "Target Roles Reason",
+            "description": "One or two sentences on why these job titles fit, citing the resume evidence and career level.",
+            "default": ""
           },
           "profile": {
             "type": "string",
             "title": "Profile",
             "description": "A brief summary of candidate's professional bacground and academic focus",
             "default": ""
+          },
+          "source_text": {
+            "type": "string",
+            "title": "Source Text",
+            "default": ""
           }
         },
         "type": "object",
         "title": "ResumeProfile"
       },
-      "RetrievalTrial": {
+      "ResumeSection": {
         "properties": {
-          "model": {
+          "heading": {
             "type": "string",
-            "title": "Model"
+            "title": "Heading",
+            "description": "The section heading exactly as the resume writes it."
           },
-          "seconds": {
-            "type": "number",
-            "title": "Seconds"
-          },
-          "ranked_ids": {
+          "entries": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Ranked Ids"
-          },
-          "metrics": {
-            "$ref": "#/components/schemas/ExperimentMetrics"
-          },
-          "error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error"
+            "title": "Entries",
+            "description": "Each item in the section as 'Title | Context | Month Year \u2013 Month Year | Details', keeping only the parts the resume gives, with its tools, scope and outcomes."
           }
         },
         "type": "object",
         "required": [
-          "model",
-          "seconds",
-          "ranked_ids",
-          "metrics"
+          "heading"
         ],
-        "title": "RetrievalTrial"
+        "title": "ResumeSection"
       },
-      "ReviewBundle": {
+      "RetrievalPlayground": {
         "properties": {
-          "dataset": {
-            "$ref": "#/components/schemas/ReviewDataset"
+          "queries": {
+            "items": {
+              "$ref": "#/components/schemas/RetrievalQuery"
+            },
+            "type": "array",
+            "title": "Queries"
           },
-          "labels": {
-            "$ref": "#/components/schemas/ReviewState"
+          "ranked": {
+            "items": {
+              "$ref": "#/components/schemas/RankedJob"
+            },
+            "type": "array",
+            "title": "Ranked"
+          },
+          "total_jobs": {
+            "type": "integer",
+            "title": "Total Jobs"
           }
         },
         "type": "object",
         "required": [
-          "dataset",
-          "labels"
+          "queries",
+          "ranked",
+          "total_jobs"
         ],
-        "title": "ReviewBundle"
+        "title": "RetrievalPlayground"
       },
-      "ReviewCriterion": {
+      "RetrievalQuery": {
         "properties": {
-          "id": {
+          "text": {
             "type": "string",
-            "title": "Id"
+            "title": "Text"
           },
-          "requirement": {
-            "type": "string",
-            "title": "Requirement"
-          },
-          "importance": {
-            "type": "string",
-            "title": "Importance"
-          },
-          "job_quote": {
-            "type": "string",
-            "title": "Job Quote"
-          },
-          "section": {
-            "type": "string",
-            "title": "Section",
-            "default": ""
-          },
-          "origin": {
-            "type": "string",
-            "title": "Origin"
-          },
-          "extraction_model": {
-            "type": "string",
-            "title": "Extraction Model",
-            "default": ""
-          },
-          "extraction_version": {
-            "type": "string",
-            "title": "Extraction Version",
-            "default": ""
-          },
-          "set_id": {
-            "type": "string",
-            "title": "Set Id",
-            "default": ""
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "requirement",
-          "importance",
-          "job_quote",
-          "origin"
-        ],
-        "title": "ReviewCriterion"
-      },
-      "ReviewDataset": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "created_at": {
+          "weight": {
             "type": "number",
-            "title": "Created At"
-          },
-          "source_id": {
-            "type": "string",
-            "title": "Source Id"
-          },
-          "fingerprint": {
-            "type": "string",
-            "title": "Fingerprint"
-          },
-          "scope": {
-            "type": "string",
-            "title": "Scope"
-          },
-          "split": {
-            "type": "string",
-            "const": "pilot",
-            "title": "Split",
-            "default": "pilot"
-          },
+            "title": "Weight"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "weight"
+        ],
+        "title": "RetrievalQuery"
+      },
+      "RetrievalRequest": {
+        "properties": {
           "profile": {
             "$ref": "#/components/schemas/ResumeProfile"
           },
-          "profile_text": {
-            "type": "string",
-            "title": "Profile Text"
-          },
-          "target_roles": {
+          "queries": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Target Roles"
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Queries"
           },
           "jobs": {
             "items": {
-              "$ref": "#/components/schemas/ReviewJob"
+              "$ref": "#/components/schemas/PlaygroundJob"
             },
             "type": "array",
+            "maxItems": 1000,
+            "minItems": 1,
             "title": "Jobs"
           },
-          "verdicts_added_at": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
+          "top_k": {
+            "type": "integer",
+            "enum": [
+              -1,
+              0,
+              15,
+              50,
+              100
             ],
-            "title": "Verdicts Added At"
+            "title": "Top K",
+            "default": -1
           },
-          "ingestion": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/IngestionRecord"
-              },
-              {
-                "type": "null"
-              }
-            ]
+          "seniority": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "any"
+            ],
+            "title": "Seniority",
+            "default": "auto"
           },
-          "dropped_jobs": {
-            "items": {
-              "$ref": "#/components/schemas/DroppedJob"
-            },
-            "type": "array",
-            "title": "Dropped Jobs"
+          "query_builder": {
+            "type": "string",
+            "enum": [
+              "evidence",
+              "skills",
+              "legacy",
+              "hyde"
+            ],
+            "title": "Query Builder",
+            "default": "hyde"
           }
         },
         "type": "object",
         "required": [
-          "id",
-          "created_at",
-          "source_id",
-          "fingerprint",
-          "scope",
           "profile",
-          "profile_text",
-          "target_roles",
+          "queries",
           "jobs"
         ],
-        "title": "ReviewDataset"
-      },
-      "ReviewDatasetSummary": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "created_at": {
-            "type": "number",
-            "title": "Created At"
-          },
-          "job_count": {
-            "type": "integer",
-            "title": "Job Count"
-          },
-          "outside_shortlist": {
-            "type": "integer",
-            "title": "Outside Shortlist"
-          },
-          "reviewed_jobs": {
-            "type": "integer",
-            "title": "Reviewed Jobs"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "created_at",
-          "job_count",
-          "outside_shortlist",
-          "reviewed_jobs"
-        ],
-        "title": "ReviewDatasetSummary"
-      },
-      "ReviewEvidence": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "provider": {
-            "type": "string",
-            "title": "Provider"
-          },
-          "model": {
-            "type": "string",
-            "title": "Model"
-          },
-          "requirement": {
-            "type": "string",
-            "title": "Requirement"
-          },
-          "verdict": {
-            "type": "string",
-            "title": "Verdict"
-          },
-          "job_quote": {
-            "type": "string",
-            "title": "Job Quote"
-          },
-          "resume_quote": {
-            "type": "string",
-            "title": "Resume Quote"
-          },
-          "explanation": {
-            "type": "string",
-            "title": "Explanation"
-          },
-          "job_quote_found": {
-            "type": "boolean",
-            "title": "Job Quote Found"
-          },
-          "profile_quote_found": {
-            "type": "boolean",
-            "title": "Profile Quote Found"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "provider",
-          "model",
-          "requirement",
-          "verdict",
-          "job_quote",
-          "resume_quote",
-          "explanation",
-          "job_quote_found",
-          "profile_quote_found"
-        ],
-        "title": "ReviewEvidence"
-      },
-      "ReviewJob": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "title": {
-            "type": "string",
-            "title": "Title"
-          },
-          "company": {
-            "type": "string",
-            "title": "Company"
-          },
-          "url": {
-            "type": "string",
-            "title": "Url"
-          },
-          "description": {
-            "type": "string",
-            "title": "Description"
-          },
-          "previously_shortlisted": {
-            "type": "boolean",
-            "title": "Previously Shortlisted"
-          },
-          "tags": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Tags"
-          },
-          "criteria": {
-            "items": {
-              "$ref": "#/components/schemas/ReviewCriterion"
-            },
-            "type": "array",
-            "title": "Criteria"
-          },
-          "evidence": {
-            "items": {
-              "$ref": "#/components/schemas/ReviewEvidence"
-            },
-            "type": "array",
-            "title": "Evidence"
-          },
-          "extraction_available": {
-            "type": "boolean",
-            "title": "Extraction Available"
-          },
-          "model_verdicts": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/ModelVerdict"
-            },
-            "type": "object",
-            "title": "Model Verdicts"
-          },
-          "app_verdict": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "App Verdict"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "title",
-          "company",
-          "url",
-          "description",
-          "previously_shortlisted",
-          "tags",
-          "criteria",
-          "evidence",
-          "extraction_available"
-        ],
-        "title": "ReviewJob"
-      },
-      "ReviewMetrics": {
-        "properties": {
-          "dataset_id": {
-            "type": "string",
-            "title": "Dataset Id"
-          },
-          "revision": {
-            "type": "integer",
-            "title": "Revision"
-          },
-          "split": {
-            "type": "string",
-            "title": "Split"
-          },
-          "pool_size": {
-            "type": "integer",
-            "title": "Pool Size"
-          },
-          "fit_reviewed": {
-            "type": "integer",
-            "title": "Fit Reviewed"
-          },
-          "ai_assisted_reviews": {
-            "type": "integer",
-            "title": "Ai Assisted Reviews"
-          },
-          "retrieval": {
-            "$ref": "#/components/schemas/ExperimentMetrics"
-          },
-          "extraction": {
-            "$ref": "#/components/schemas/ExtractionMetrics"
-          },
-          "evidence": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/EvidenceMetrics"
-            },
-            "type": "object",
-            "title": "Evidence"
-          },
-          "stages": {
-            "$ref": "#/components/schemas/StageMetrics"
-          },
-          "limitations": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Limitations"
-          }
-        },
-        "type": "object",
-        "required": [
-          "dataset_id",
-          "revision",
-          "split",
-          "pool_size",
-          "fit_reviewed",
-          "ai_assisted_reviews",
-          "retrieval",
-          "extraction",
-          "evidence",
-          "stages",
-          "limitations"
-        ],
-        "title": "ReviewMetrics"
-      },
-      "ReviewState": {
-        "properties": {
-          "revision": {
-            "type": "integer",
-            "title": "Revision",
-            "default": 0
-          },
-          "jobs": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/JobReview"
-            },
-            "type": "object",
-            "title": "Jobs"
-          },
-          "reviewers": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object",
-            "title": "Reviewers"
-          },
-          "updated_at": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updated At"
-          }
-        },
-        "type": "object",
-        "title": "ReviewState"
+        "title": "RetrievalRequest"
       },
       "RunCreated": {
         "properties": {
@@ -4407,6 +2966,13 @@
             "title": "Last Search Added",
             "default": 0
           },
+          "searches": {
+            "items": {
+              "$ref": "#/components/schemas/SearchRecord"
+            },
+            "type": "array",
+            "title": "Searches"
+          },
           "jobs_found": {
             "type": "integer",
             "title": "Jobs Found",
@@ -4430,6 +2996,16 @@
           "evaluation_failed": {
             "type": "integer",
             "title": "Evaluation Failed",
+            "default": 0
+          },
+          "retry_total": {
+            "type": "integer",
+            "title": "Retry Total",
+            "default": 0
+          },
+          "retry_done": {
+            "type": "integer",
+            "title": "Retry Done",
             "default": 0
           },
           "displayed_jobs": {
@@ -4470,6 +3046,20 @@
             "type": "array",
             "title": "Scrape Errors"
           },
+          "skipped_models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skipped Models"
+          },
+          "busy_boards": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Busy Boards"
+          },
           "evaluation_model_id": {
             "type": "string",
             "title": "Evaluation Model Id",
@@ -4498,32 +3088,6 @@
           "status"
         ],
         "title": "RunSnapshot"
-      },
-      "SaveReview": {
-        "properties": {
-          "revision": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Revision"
-          },
-          "reviewer": {
-            "type": "string",
-            "maxLength": 100,
-            "minLength": 1,
-            "title": "Reviewer"
-          },
-          "review": {
-            "$ref": "#/components/schemas/JobReview"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "revision",
-          "reviewer",
-          "review"
-        ],
-        "title": "SaveReview"
       },
       "SavedProfile": {
         "properties": {
@@ -4644,167 +3208,304 @@
         ],
         "title": "SavedProfileInput"
       },
-      "SearchTextJob": {
+      "SearchRecord": {
         "properties": {
-          "id": {
+          "at": {
             "type": "string",
-            "title": "Id"
+            "title": "At"
           },
+          "platforms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Platforms"
+          },
+          "queries": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Queries"
+          },
+          "locations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Locations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "at"
+        ],
+        "title": "SearchRecord"
+      },
+      "SkillGroup": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "A short area of work, for example 'LLM applications', 'Backend' or 'Data analysis'."
+          },
+          "skills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skills",
+            "description": "Skills from tech_skills, written exactly as listed there."
+          },
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "One 15-35 word sentence a job ad would use for this kind of work, for example 'Build and deploy backend REST APIs using Python, FastAPI and PostgreSQL.' Name the mainstream tools employers list and describe niche models or tools by their category ('U-Net' becomes 'image segmentation models'). Leave out project, dataset and domain details, team words such as 'collaboratively', and work the resume does not show.",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "SkillGroup"
+      },
+      "TailoredEntry": {
+        "properties": {
+          "heading": {
+            "type": "string",
+            "title": "Heading"
+          },
+          "organization": {
+            "type": "string",
+            "title": "Organization",
+            "default": ""
+          },
+          "location": {
+            "type": "string",
+            "title": "Location",
+            "default": ""
+          },
+          "dates": {
+            "type": "string",
+            "title": "Dates",
+            "default": ""
+          },
+          "bullets": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Bullets"
+          }
+        },
+        "type": "object",
+        "required": [
+          "heading"
+        ],
+        "title": "TailoredEntry"
+      },
+      "TailoredResume": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "default": ""
+          },
+          "headline": {
+            "type": "string",
+            "title": "Headline",
+            "default": ""
+          },
+          "contact": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Contact"
+          },
+          "profile_points": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Profile Points"
+          },
+          "skills": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skills"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/TailoredSection"
+            },
+            "type": "array",
+            "title": "Sections"
+          },
+          "gaps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Gaps"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "default": ""
+          },
+          "unverified": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unverified"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model",
+            "default": ""
+          },
+          "generated_at": {
+            "type": "number",
+            "title": "Generated At",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "TailoredResume"
+      },
+      "TailoredResumeRequest": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key"
+        ],
+        "title": "TailoredResumeRequest"
+      },
+      "TailoredSection": {
+        "properties": {
           "title": {
             "type": "string",
             "title": "Title"
           },
-          "kept": {
-            "type": "integer",
-            "title": "Kept"
-          },
-          "total": {
-            "type": "integer",
-            "title": "Total"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "title",
-          "kept",
-          "total"
-        ],
-        "title": "SearchTextJob"
-      },
-      "SearchTextMetrics": {
-        "properties": {
-          "jobs_checked": {
-            "type": "integer",
-            "title": "Jobs Checked"
-          },
-          "quotes": {
-            "type": "integer",
-            "title": "Quotes"
-          },
-          "kept": {
-            "type": "integer",
-            "title": "Kept"
-          },
-          "rate": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rate"
-          },
-          "lowest": {
+          "entries": {
             "items": {
-              "$ref": "#/components/schemas/SearchTextJob"
+              "$ref": "#/components/schemas/TailoredEntry"
             },
             "type": "array",
-            "title": "Lowest"
+            "title": "Entries"
           }
         },
         "type": "object",
         "required": [
-          "jobs_checked",
-          "quotes",
-          "kept",
-          "rate",
-          "lowest"
+          "title"
         ],
-        "title": "SearchTextMetrics"
+        "title": "TailoredSection"
       },
-      "StageFunnel": {
+      "UnsupportedEntry": {
         "properties": {
-          "good_fits": {
-            "type": "integer",
-            "title": "Good Fits"
+          "field": {
+            "type": "string",
+            "title": "Field"
           },
-          "lost_at_ingestion": {
-            "type": "integer",
-            "title": "Lost At Ingestion"
+          "entry": {
+            "type": "string",
+            "title": "Entry"
           },
-          "lost_at_retrieval": {
-            "type": "integer",
-            "title": "Lost At Retrieval"
-          },
-          "not_assessed": {
-            "type": "integer",
-            "title": "Not Assessed"
-          },
-          "rejected_at_generation": {
-            "type": "integer",
-            "title": "Rejected At Generation"
-          },
-          "needs_review": {
-            "type": "integer",
-            "title": "Needs Review"
-          },
-          "recommended": {
-            "type": "integer",
-            "title": "Recommended"
+          "found_share": {
+            "type": "number",
+            "title": "Found Share"
           }
         },
         "type": "object",
         "required": [
-          "good_fits",
-          "lost_at_ingestion",
-          "lost_at_retrieval",
-          "not_assessed",
-          "rejected_at_generation",
-          "needs_review",
-          "recommended"
+          "field",
+          "entry",
+          "found_share"
         ],
-        "title": "StageFunnel"
+        "title": "UnsupportedEntry"
       },
-      "StageMetrics": {
+      "UploadCheck": {
         "properties": {
-          "verdicts_available": {
+          "source_text_available": {
             "type": "boolean",
-            "title": "Verdicts Available"
+            "title": "Source Text Available"
           },
-          "funnel": {
-            "$ref": "#/components/schemas/StageFunnel"
-          },
-          "ingestion": {
-            "$ref": "#/components/schemas/IngestionMetrics"
-          },
-          "retrieval_missed": {
+          "missing_fields": {
             "items": {
-              "$ref": "#/components/schemas/MissedJob"
+              "type": "string"
             },
             "type": "array",
-            "title": "Retrieval Missed"
+            "title": "Missing Fields"
           },
-          "generation": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/GenerationMetrics"
+          "empty_sections": {
+            "items": {
+              "type": "string"
             },
-            "type": "object",
-            "title": "Generation"
+            "type": "array",
+            "title": "Empty Sections"
           },
-          "app": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/GenerationMetrics"
-              },
-              {
-                "type": "null"
-              }
-            ]
+          "entries_checked": {
+            "type": "integer",
+            "title": "Entries Checked"
+          },
+          "unsupported_entries": {
+            "items": {
+              "$ref": "#/components/schemas/UnsupportedEntry"
+            },
+            "type": "array",
+            "title": "Unsupported Entries"
+          },
+          "skills_not_in_resume": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skills Not In Resume"
+          },
+          "years_check": {
+            "type": "string",
+            "title": "Years Check"
           }
         },
         "type": "object",
         "required": [
-          "verdicts_available",
-          "funnel",
-          "ingestion",
-          "retrieval_missed",
-          "generation",
-          "app"
+          "source_text_available",
+          "missing_fields",
+          "empty_sections",
+          "entries_checked",
+          "unsupported_entries",
+          "skills_not_in_resume",
+          "years_check"
         ],
-        "title": "StageMetrics"
+        "title": "UploadCheck"
+      },
+      "UploadPlayground": {
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/ResumeProfile"
+          },
+          "check": {
+            "$ref": "#/components/schemas/UploadCheck"
+          }
+        },
+        "type": "object",
+        "required": [
+          "profile",
+          "check"
+        ],
+        "title": "UploadPlayground"
       },
       "ValidationError": {
         "properties": {
@@ -4845,27 +3546,6 @@
           "type"
         ],
         "title": "ValidationError"
-      },
-      "VerdictCounts": {
-        "properties": {
-          "strong_match": {
-            "type": "integer",
-            "title": "Strong Match",
-            "default": 0
-          },
-          "review": {
-            "type": "integer",
-            "title": "Review",
-            "default": 0
-          },
-          "not_suitable": {
-            "type": "integer",
-            "title": "Not Suitable",
-            "default": 0
-          }
-        },
-        "type": "object",
-        "title": "VerdictCounts"
       },
       "VerifiedRequirement": {
         "properties": {
@@ -4919,10 +3599,13 @@
             "type": "string",
             "title": "Job Quote"
           },
-          "resume_quote": {
-            "type": "string",
-            "title": "Resume Quote",
-            "default": ""
+          "resume_quotes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Resume Quotes",
+            "description": "Every short verbatim resume passage that supports this verdict, usually one to three, from any section; empty when the resume does not mention the requirement."
           },
           "explanation": {
             "type": "string",
@@ -4938,6 +3621,18 @@
             "type": "boolean",
             "title": "Resume Evidence Verified",
             "default": false
+          },
+          "resume_quote": {
+            "type": "string",
+            "title": "Resume Quote",
+            "default": ""
+          },
+          "resume_quotes_verified": {
+            "items": {
+              "type": "boolean"
+            },
+            "type": "array",
+            "title": "Resume Quotes Verified"
           }
         },
         "additionalProperties": false,

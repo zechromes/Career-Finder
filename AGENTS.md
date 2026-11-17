@@ -50,12 +50,17 @@ table differ per tool.
 | --- | --- | --- | --- | --- | --- |
 | Codex | Root `AGENTS.md` | `agents/skills/`, read explicitly | `.codex/agents/*.toml` (one per role, each loads its skill) | Set in the agent definition or session; applies to newly spawned agents, not the current conversation | Codex config under `.codex/` (TOML) |
 | Antigravity | Root `AGENTS.md` (do not add `GEMINI.md`, which would override this file) | `agents/skills/`, read explicitly; `.agents/skills` may be a symlink to it | No definition file; start one agent per role from the Manager view and pass the skill path, owned files, and acceptance criteria | Model picker in the app | `.agents/mcp_config.json` (JSON) |
+| Claude Code | Root `AGENTS.md`, read natively (do not add a project `CLAUDE.md` that restates it) | `agents/skills/`, read explicitly | `.claude/agents/*.md` if added; none yet | `/model` or agent frontmatter | `.mcp.json` (JSON); none configured yet |
 | Other tools | Add a row when adopted. If a tool does not read `AGENTS.md`, point its own rules file at this one instead of copying it. | `agents/skills/` | Tool-specific | Tool-specific | Tool-specific |
 
 - When adding or changing a server, update the MCP configuration of every tool
   in the table so they stay equivalent, and note any intentional difference.
 - Tool-specific files may reference this document; they must not restate or
   contradict it.
+- Personal global guidelines (for example `~/.claude/CLAUDE.md`) apply alongside
+  this document but do not override it. Where they say to stop and ask whenever
+  uncertain, follow the Project manager rule instead: resolve routine choices
+  autonomously and ask only about material product or scope decisions.
 
 ## Load role skills
 
@@ -100,8 +105,8 @@ Before starting role-specific work, read the assigned skill from
 ### Evaluation manager
 
 - Own the quality of retrieval, ranking, requirement evidence, and candidate-fit
-  assessments. Consult `docs/EVALUATION_MODELS.md` and
-  `docs/matching-improvements.md` before changing matching behavior.
+  assessments. Consult `docs/Architecture.md` (retrieval, requirements and
+  evaluation sections) and `docs/DECISIONS.md` before changing matching behavior.
 - Base assessments on resume and job-posting evidence. Distinguish missing
   information from a demonstrated mismatch; do not invent experience, salary,
   qualifications, or company facts.
@@ -132,7 +137,7 @@ Before starting role-specific work, read the assigned skill from
 - Keep structure-only changes behavior-preserving. Update affected imports,
   launchers, tests, and documentation together when moving files.
 - Do not delete or migrate private inputs, saved runs, caches, databases, or
-  exports as part of tidying. Follow the data-location guidance in `README.md`.
+  exports as part of tidying. Follow the data-location guidance in `docs/DEVELOPMENT.md`.
 - Avoid speculative abstractions, mass renaming, and unrelated formatting.
 - Own documentation arrangement: organize current guides and historical archives,
   maintain the README documentation index, and update links and image paths when

@@ -13,7 +13,7 @@ import pdfplumber
 
 # This schema tells the language model exactly which candidate details to
 # extract from the resume.
-PROFILE_MODELS = {"openai": "gpt-4o-mini"}
+PROFILE_MODELS = {"openai": "gpt-6.1-sol"}
 
 
 # Resolve a supported extraction provider to its configured model.
@@ -21,8 +21,20 @@ def profile_model_id(provider):
     return os.getenv(f"{provider.upper()}_PROFILE_MODEL") or PROFILE_MODELS[provider]
 
 
+def profile_llm(model):
+    """One client for resume reading; reasoning models reject a temperature."""
+    from langchain_openai import ChatOpenAI
+
+    sampling = (
+        {"temperature": 0}
+        if model.startswith(("gpt-3", "gpt-4"))
+        else {"reasoning_effort": "low"}
+    )
+    return ChatOpenAI(model=model, timeout=180.0, max_retries=1, **sampling)
+
+
 # Define the structured candidate evidence extracted from a resume.
-from backend.schemas.resume import ResumeProfile  # Compatibility export.
+from backend.schemas.resume import ExtractedProfile, ResumeProfile  # Compatibility export.
 
 
 @stage("resume.extract_text")
@@ -72,20 +84,13 @@ def extract_context(model_type: str, resume_text: str) -> ResumeProfile:
     """Use OpenAI to turn resume text into a structured profile."""
     if model_type.lower() != "openai":
         raise ValueError("Profile extraction only supports OpenAI.")
-    from langchain_openai import ChatOpenAI
-
-    llm = ChatOpenAI(
-        model=profile_model_id("openai"),
-        timeout=90.0,
-        max_retries=1,
-        temperature=0,
+    structured_llm = profile_llm(profile_model_id("openai")).with_structured_output(
+        ExtractedProfile
     )
-    structured_llm = llm.with_structured_output(ResumeProfile)
-
-    prompt = profile_prompt(resume_text)
-
-    profile = structured_llm.invoke(prompt)
-    return profile
+    extracted = ExtractedProfile.model_validate(
+        structured_llm.invoke(profile_prompt(resume_text))
+    )
+    return ResumeProfile(**extracted.model_dump(), source_text=resume_text)
 
 
 def profile_prompt(resume_text):
@@ -105,6 +110,17 @@ def profile_prompt(resume_text):
       Keep each description attached to its own role. Preserve useful detail as newline-separated
       sentences in the Responsibilities field; never invent duties or achievements. If absent, leave it empty.
       Format each education string as "Qualification | Institution | Month Year – Month Year | Details".
+      First list every section heading in section_headings, in order, exactly as written.
+      Then fill each section: work and education go in work_history and education; every
+      other section (for example Projects, Certifications, Publications, Volunteering,
+      Awards, Research, Leadership, Languages) goes in sections under its own heading.
+      Each entry is "Title | Context | Month Year – Month Year | Details"; for a project,
+      Context says whether it was personal, academic or for an employer. Keep tools, scope
+      and documented outcomes; never invent them. Nothing in sections adds to
+      years_of_experience. Do not leave a listed section out.
+      For preferred_domains, analyse the whole resume and suggest three to six realistic
+      job titles to search for now at the candidate's career level, and explain them in
+      target_roles_reason. Do not suggest roles above the candidate's demonstrated level.
       Preserve the resume's actual months and years, spelling out month names. Use Present for ongoing entries.
       When only a year is given, retain that year without inventing a month. Leave missing fields empty.
       Resume:\n\n{resume_text}

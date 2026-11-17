@@ -36,8 +36,12 @@ function state(index: number) {
 }
 const progressPercent = computed(() => {
   const run = props.run
-  if (run?.phase !== 4 || !run.evaluation_total) return undefined
-  return Math.min(100, Math.max(0, Math.round((100 * run.evaluated_jobs) / run.evaluation_total)))
+  // A retry reports its own counters; the search-wide ones are already near 100%.
+  const [done, total] = run?.retry_total
+    ? [run.retry_done, run.retry_total]
+    : [run?.evaluated_jobs, run?.evaluation_total]
+  if (run?.phase !== 4 || !total) return undefined
+  return Math.min(100, Math.max(0, Math.round((100 * (done || 0)) / total)))
 })
 const labels = {
   done: 'Complete',
@@ -116,7 +120,9 @@ const labels = {
       </div>
       <p aria-live="polite" class="text-sm text-slate-700 dark:text-slate-200">
         {{ run.message
-        }}<span v-if="run.phase === 4">
+        }}<span v-if="run.phase === 4 && run.retry_total">
+          · {{ run.retry_done || 0 }} of {{ run.retry_total }} assessments retried</span
+        ><span v-else-if="run.phase === 4">
           · {{ run.evaluated_jobs || 0 }} of {{ run.evaluation_total || 0 }} evaluated</span
         ><span v-else-if="run.phase === 2"> · {{ run.jobs_found || 0 }} postings found</span
         ><span v-else-if="run.phase === 3">

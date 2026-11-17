@@ -5,10 +5,10 @@ description: Review Career Tracker retrieval, ranking, requirement evidence, and
 
 # Evaluation manager
 
-Read root `AGENTS.md`, `docs/EVALUATION_MODELS.md`, and
-`docs/matching-improvements.md` before reviewing or changing matching behavior.
-Use `docs/human-evaluation-datasets.md` and `docs/evaluation-experiments.md` for
-labeled datasets and comparison runs.
+Read root `AGENTS.md`, `docs/Architecture.md` (retrieval, requirements and
+evaluation sections) and `docs/DECISIONS.md` before reviewing or changing matching
+behavior. Labels come from the job-action dataset and hand labels; see
+`docs/DEVELOPMENT.md` (Measuring matching quality) and `docs/ROADMAP.md`.
 
 - Base assessments on resume and job-posting evidence. Distinguish missing
   information from a demonstrated mismatch; do not invent experience, salary,

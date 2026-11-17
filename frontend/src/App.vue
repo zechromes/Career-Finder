@@ -12,9 +12,10 @@ import DismissJobDialog from './components/DismissJobDialog.vue'
       <RouterLink
         to="/"
         class="font-display text-2xl font-bold tracking-tight text-indigo-700 dark:text-indigo-300"
-        >Career Signal</RouterLink
+        >Career Finder</RouterLink
       >
       <nav aria-label="Main navigation" class="flex items-center gap-4">
+        <RouterLink to="/settings" class="btn-secondary">Settings</RouterLink>
         <ThemeToggle />
       </nav>
     </header>
@@ -24,7 +25,7 @@ import DismissJobDialog from './components/DismissJobDialog.vue'
     <footer
       class="mt-10 flex justify-between border-t border-slate-200 dark:border-slate-700 py-5 text-xs text-slate-600 dark:text-slate-300"
     >
-      <span>Career Tracker</span
+      <span>Career Finder</span
       ><RouterLink to="/privacy" class="underline">Privacy &amp; data retention</RouterLink>
     </footer>
   </div>

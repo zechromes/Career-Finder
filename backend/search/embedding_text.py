@@ -4,21 +4,22 @@ import re
 from html import unescape
 
 
+# Current roles sort first, then the latest year an entry mentions; 0 when undated.
+def entry_year(entry):
+    if re.search(r"\b(present|current|now)\b", entry, re.I):
+        return 9999
+    years = re.findall(r"\b(?:19|20)\d{2}\b", entry)
+    return max(map(int, years), default=0)
+
+
 # Build focused candidate text for retrieval without embedding unrelated resume details.
 def profile_embedding_text(profile):
     data = profile if isinstance(profile, dict) else profile.model_dump()
     history = list(data.get("work_history") or [])
 
-    # Sort current roles first, then use the latest year mentioned in each entry.
-    def recency(entry):
-        if re.search(r"\b(present|current|now)\b", entry, re.I):
-            return 9999
-        years = re.findall(r"\b(?:19|20)\d{2}\b", entry)
-        return max(map(int, years), default=0)
-
     # Stable ordering retains resume order for ties/undated roles. Limit older
     # history rather than claiming we can determine relevance from titles alone.
-    recent = sorted(history, key=recency, reverse=True)[:3]
+    recent = sorted(history, key=entry_year, reverse=True)[:3]
     fields = [
         ("Headline", data.get("headline")),
         ("Summary", data.get("profile")),

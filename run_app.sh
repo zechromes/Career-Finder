@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Start the Career Tracker API and Vue development server together.
+# Start the Career Finder API and Vue development server together.
 set -euo pipefail
 
 # Resolve paths relative to this script so it can be launched from any
@@ -51,7 +51,7 @@ API_PID=""
 VITE_PID=""
 cleanup() {
   trap - EXIT INT TERM
-  echo "Stopping Career Tracker..."
+  echo "Stopping Career Finder..."
   for pid in "$API_PID" "$VITE_PID"; do
     if [ -n "$pid" ]; then
       kill "$pid" 2>/dev/null || true
@@ -76,7 +76,7 @@ VITE_PID=$!
 
 # Bash 3 (macOS) has no wait -n. Detect either child exiting so a failed
 # backend cannot leave a frontend running with an unusable API proxy.
-echo "Career Tracker started. Press Ctrl+C to stop both services."
+echo "Career Finder started. Press Ctrl+C to stop both services."
 while kill -0 "$API_PID" 2>/dev/null && kill -0 "$VITE_PID" 2>/dev/null; do
   sleep 1
 done
@@ -84,7 +84,7 @@ for pid in "$API_PID" "$VITE_PID"; do
   if ! kill -0 "$pid" 2>/dev/null; then
     code=0
     wait "$pid" || code=$?
-    echo "A service stopped (exit $code); shutting down Career Tracker."
+    echo "A service stopped (exit $code); shutting down Career Finder."
     [ "$code" -ne 0 ] || code=1
     exit "$code"
   fi

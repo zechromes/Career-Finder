@@ -3,6 +3,7 @@
 from backend.observability import stage, mark
 import json
 import copy
+import logging
 import time
 import uuid
 from datetime import datetime, timezone
@@ -26,6 +27,11 @@ import backend.evaluation.orchestration as orchestration
 import backend.search.collection as collection
 import backend.search.ingestion_log as ingestion_log
 import backend.search.retrieval as retrieval
+
+from backend.search import board_cooldown
+
+LOGGER = logging.getLogger(__name__)
+
 
 
 def retry_external_call(operation, attempts=3):
@@ -54,6 +60,10 @@ def execute_job_search(run_id, resume_path, options):
     history_path = run_dir / "shortlisted_jobs.json"
 
     try:
+        # Check the models while job boards are searched, so evaluation need not wait.
+        from backend.evaluation.providers import warm_availability
+
+        warm_availability()
         from backend.search.preferences import load_feedback
 
         # Read owner-scoped feedback once; later changes affect the next search.
@@ -98,6 +108,19 @@ def execute_job_search(run_id, resume_path, options):
             matching_strategy="role_first",
             scrape_errors=[],
             last_search_added=0,
+            # A cancelled retry cannot clear its own counters; a new search does.
+            retry_total=0,
+            retry_done=0,
+            # What each search covered, so Find more can say what is new or repeated.
+            searches=(previous.get("searches", []) if append else [])
+            + [
+                dict(
+                    at=datetime.now(timezone.utc).isoformat(),
+                    platforms=list(options["platforms"]),
+                    queries=list(options["queries"]),
+                    locations=list(options["locations"]),
+                )
+            ],
             evaluation_model="all",
             evaluation_model_id="Claude + GPT + Gemini",
         )
@@ -126,10 +149,23 @@ def execute_job_search(run_id, resume_path, options):
                 evaluation_model_id="Claude + GPT + Gemini",
             )
         scrape_errors = []
+        rate_limited = []
+        busy_boards = []
+        runs.update_run(run_id, busy_boards=[])
 
         # Keep source failures visible while other job-board searches continue.
+        # Rate limits are not the user's fault and retrying rarely helps, so the
+        # raw message goes to the server log and the page gets a calm note.
         def scrape_failure(message):
             mark("partial")
+            if board_cooldown.is_rate_limit(message):
+                LOGGER.warning("Job board rate limit: %s", message)
+                rate_limited.append(message)
+                note = board_cooldown.busy_note(message)
+                if note not in busy_boards:
+                    busy_boards.append(note)
+                    runs.update_run(run_id, busy_boards=list(busy_boards))
+                return
             scrape_errors.append(message)
             runs.update_run(run_id, scrape_errors=list(scrape_errors))
 
@@ -210,6 +246,11 @@ def execute_job_search(run_id, resume_path, options):
                 append=append,
             ),
         )
+        if not jobs and rate_limited and not scrape_errors:
+            scrape_errors.append(
+                "Job boards are busy right now. Try again in a few minutes."
+            )
+            runs.update_run(run_id, scrape_errors=list(scrape_errors))
         # A duplicate-only search completes without clearing the earlier result snapshot.
         if append and not jobs:
             runs.update_run(
@@ -226,7 +267,8 @@ def execute_job_search(run_id, resume_path, options):
                 message=(
                     "Job searches failed; your previous results are still available."
                     if scrape_errors
-                    else "No new jobs were found. Your previous results are still available."
+                    else f"No new jobs were found; {len(ingestion.workspace)} already in your "
+                    "results were skipped. Your previous results are still available."
                 ),
             )
             if not scrape_errors:
@@ -478,6 +520,16 @@ def execute_job_search(run_id, resume_path, options):
                 evaluation_skipped=sum(item["skipped"] for item in evaluation_errors),
             )
 
+        # Report models skipped as unavailable; verdicts then use the others.
+        skipped_models = []
+        runs.update_run(run_id, skipped_models=[])
+
+        def save_skipped_model(option, failure):
+            skipped_models.append(
+                f"{option['label']} was skipped: {failure} Verdicts use the remaining models; retry it once it is available."
+            )
+            runs.update_run(run_id, skipped_models=list(skipped_models))
+
         # Individual requests retry under the selected provider policy. Retrying this
         # entire function would charge again for jobs that already succeeded.
         evaluated_recommendations = orchestration.evaluate_jobs(
@@ -494,6 +546,7 @@ def execute_job_search(run_id, resume_path, options):
             candidate_profile=candidate_profile,
             on_error=save_evaluation_error,
             should_cancel=lambda: runs.stopped(run_id),
+            on_unavailable=save_skipped_model,
         )
         runs.check_running(run_id)
         failed_evaluations = len(evaluation_errors)
@@ -570,6 +623,7 @@ def execute_job_search(run_id, resume_path, options):
             message=(
                 (
                     f"Added {len(evaluated_recommendations)} new jobs; "
+                    f"{len(ingestion.workspace)} already in your results were skipped; "
                     if append
                     else f"Evaluated {len(evaluated_recommendations)} jobs; "
                 )
@@ -599,7 +653,7 @@ async def start_job_search(
     run_id: str,
     queries: str = Form(...),
     locations: str = Form(""),
-    platforms: str = Form("linkedin,indeed,glassdoor"),
+    platforms: str = Form("linkedin,indeed"),
     remote: bool = Form(False),
     posted_days_old: int = Form(30),
     top_k: int = Form(15),
@@ -614,6 +668,8 @@ async def start_job_search(
         run = runs.RUNS.get(run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Run not found.")
+    # A search is the first point where an upload is written to disk.
+    runs.commit_upload(run_id)
     if run_id in runs.ACTIVE_WORKERS or run["status"] not in {
         "awaiting_search",
         "complete",
@@ -632,9 +688,11 @@ async def start_job_search(
             status_code=409,
             detail="Upload your resume again to generate a profile before searching.",
         )
-    if not 0 <= top_k <= 10000:
+    # -1 is the Automatic shortlist (see retrieval.AUTO_SHORTLIST).
+    if not -1 <= top_k <= 10000:
         raise HTTPException(
-            status_code=400, detail="Results to evaluate must be between 0 and 10000."
+            status_code=400,
+            detail="Results to evaluate must be between 0 and 10000, or -1 for automatic.",
         )
     if posted_days_old not in {0, 1, 7, 30}:
         raise HTTPException(
@@ -862,13 +920,13 @@ async def confirm_search_profile(run_id: str, body: ProfileConfirmation):
                 run_id, FindMoreRequest(preferences=body.preferences)
             )
         context = profile_to_context(body.profile)
+        runs.commit_upload(run_id)
         runs.RUNS[run_id].update(
             profile=body.profile.model_dump(),
             preferences=prefs,
             status="awaiting_search",
         )
-        runs.RUN_CONTEXTS[run_id] = context
-        runs.run_context_path(run_id).write_text(context, encoding="utf-8")
+        runs.write_context(run_id, context)
         runs.persist_run(run_id)
         await start_job_search(
             run_id,

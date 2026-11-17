@@ -1,14 +1,17 @@
-"""Evaluate with all providers, preserving independent results and retry identity."""
+"""Evaluate with every available provider, preserving independent results and retry identity."""
 
 from backend.observability import stage, submit, mark
 import copy
 import hashlib
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from threading import RLock
 from langchain_core.documents import Document
 from backend.evaluation.providers import (
     evaluate_jobs as evaluate_provider,
+    UNUSABLE,
+    check_availability,
     evaluation_model_options,
+    mark_unavailable,
 )
 from backend.evaluation.runtime import classify_failure, EvaluationFailure
 
@@ -22,21 +25,35 @@ def identity(job):
     )
 
 
-# Require all three assessments for an overall score; disagreement remains review.
+NAMES = {"claude": "Claude", "gpt": "GPT", "gemini": "Gemini"}
+AVAILABILITY_CHECK_SECONDS = 20
+
+
+# Require an assessment from every model the job was sent to; disagreement
+# remains review. A model skipped as unavailable keeps a retryable row but does
+# not count until a retry completes it.
 def summarize(job):
     result = copy.deepcopy(job)
     assessments = result.get("model_evaluations", {})
+    used = [
+        key
+        for key in NAMES
+        if key in assessments and assessments[key].get("status") != "skipped"
+    ]
+    required = len(used)
     complete = [row for row in assessments.values() if row.get("status") == "complete"]
     set_ids = {row.get("requirement_set_id", "") for row in complete}
     compatible = len(set_ids) <= 1
-    all_complete = len(complete) == 3 and compatible
+    all_complete = required > 0 and len(complete) == required and compatible
     categories = {row.get("fit_category", "review") for row in complete}
     result["fit_category"] = (
         next(iter(categories)) if all_complete and len(categories) == 1 else "review"
     )
     scores = [row["score"] for row in complete if row.get("score") is not None]
     result["score"] = (
-        round(sum(scores) / 3) if all_complete and len(scores) == 3 else None
+        round(sum(scores) / required)
+        if all_complete and len(scores) == required
+        else None
     )
     # Expose available agreement without replacing the conservative final verdict.
     result["completed_models"] = len(complete)
@@ -51,7 +68,7 @@ def summarize(job):
         else None
     )
     result["assessment_summary"] = (
-        f"{len(complete)}/3 models complete; {result['agreement_count']}/{len(complete)} completed verdicts agree."
+        f"{len(complete)}/{required} models complete; {result['agreement_count']}/{len(complete)} completed verdicts agree."
         if complete
         else "Waiting for model assessments."
     )
@@ -64,11 +81,18 @@ def summarize(job):
             "assessment_summary"
         ] += " Assessments use different requirement lists; no combined score is shown. Start a new search to compare the same criteria."
     result["is_strong_fit"] = result["fit_category"] == "strong_match"
-    result["score_method"] = "three-model-average-v1"
+    result["score_method"] = (
+        "three-model-average-v1" if required == 3 else f"{required}-model-average-v1"
+    )
     result["evaluation_provider"] = "all"
-    result["evaluation_model_id"] = "Claude + GPT + Gemini"
+    result["evaluation_model_id"] = " + ".join(NAMES[key] for key in used)
+    everyone = "The model" if required == 1 else f"All {required} models"
     result["rationale"] = (
-        "All three models agree on the verdict."
+        (
+            "Only one model was available; this is its verdict."
+            if required == 1
+            else f"{everyone} agree on the verdict."
+        )
         if all_complete and len(categories) == 1
         else (
             "Models disagree; compare their assessments below."
@@ -81,7 +105,7 @@ def summarize(job):
             "Assessments use different requirement lists. Review individual results or start a new search."
         )
     result["mismatch_reason"] = (
-        "All three models marked this job not recommended."
+        f"{everyone} marked this job not recommended."
         if result["fit_category"] == "not_suitable"
         else ""
     )
@@ -98,8 +122,9 @@ def merge_result(existing, incoming):
         return incoming
     merged = {**existing, **incoming}
     rows = copy.deepcopy(existing.get("model_evaluations", {}))
+    # A pending or skipped row never replaces an earlier assessment.
     for provider, row in incoming["model_evaluations"].items():
-        if row.get("status") != "pending" or provider not in rows:
+        if row.get("status") not in {"pending", "skipped"} or provider not in rows:
             rows[provider] = row
     merged["model_evaluations"] = rows
     return summarize(merged)
@@ -118,17 +143,45 @@ def evaluate_jobs(
     on_error=None,
     should_cancel=None,
     cache_directory=None,
+    on_unavailable=None,
 ):
-    """The web flow always uses all models; tagged retry documents use only that model."""
+    """The web flow uses every available model; tagged retry documents use only that model.
+
+    A model that cannot evaluate (quota or spend cap, credentials, model access)
+    is skipped and reported through on_unavailable instead of failing every job.
+    """
     from backend.evaluation.requirements import RequirementLoader
 
     requirement_loader = RequirementLoader(should_cancel or (lambda: False))
     configured = {item["value"]: item for item in evaluation_model_options()}
     options = [configured[key] for key in ("claude", "gpt", "gemini")]
+    if should_cancel and should_cancel():
+        options = []
+    # A retry checks only the models it would call. The retry service clears their
+    # cached answers first, so a model whose quota was restored is used again.
+    retry = bool(jobs) and all("_evaluation_provider" in doc.metadata for doc in jobs)
+    if retry:
+        needed = {doc.metadata["_evaluation_provider"] for doc in jobs}
+        options = [item for item in options if item["value"] in needed]
+    # A slow provider counts as available rather than delaying the search.
+    executor = ThreadPoolExecutor(max_workers=3)
+    futures = [executor.submit(check_availability, item["value"]) for item in options]
+    wait(futures, timeout=AVAILABILITY_CHECK_SECONDS)
+    executor.shutdown(wait=False)
+    checks = [future.result() if future.done() else None for future in futures]
+    # With no model available, a new search evaluates anyway so each failure is
+    # recorded; a retry never re-sends to a model that is still unavailable.
+    skipped = []
+    if retry or not all(checks):
+        skipped = [(item, failure) for item, failure in zip(options, checks) if failure]
+        for item, failure in skipped:
+            if on_unavailable:
+                on_unavailable(item, failure)
+        options = [item for item, failure in zip(options, checks) if not failure]
     by_key = {}
     lock = RLock()
     failures = 0
-    for doc in jobs:
+    for rank, doc in enumerate(jobs):
         key = str(
             doc.metadata.get("url")
             or (doc.metadata.get("title", "") + doc.metadata.get("company", ""))
@@ -145,6 +198,13 @@ def evaluate_jobs(
             "posted_at": doc.metadata.get("posted_at", ""),
             "company_logo": doc.metadata.get("company_logo", ""),
             "job_description": doc.metadata.get("job_description", ""),
+            # Shortlist position orders jobs with the same verdict; a retry keeps
+            # the original position by not sending one.
+            **(
+                {}
+                if "_evaluation_provider" in doc.metadata
+                else {"shortlist_rank": rank}
+            ),
             "description_available": bool(
                 doc.metadata.get("job_description", "").strip()
             ),
@@ -157,6 +217,14 @@ def evaluate_jobs(
                 for item in options
             },
         }
+        # A skipped row is saved with the failed jobs, so a later retry can fill it.
+        for item, failure in skipped:
+            by_key[key]["model_evaluations"][item["value"]] = {
+                "provider": item["value"],
+                "evaluation_model_id": item["model_id"],
+                "status": "skipped",
+                "error": str(failure),
+            }
 
     # Resolve the posting key used to join this batch’s provider assessments.
     def key_for(doc):
@@ -283,6 +351,9 @@ def evaluate_jobs(
                     "rate_limit",
                 }:
                     blocked[0] = error
+                if getattr(error, "category", "") in UNUSABLE:
+                    # Skip this model in the next search without another check.
+                    mark_unavailable(current, error)
                 by_key[key]["model_evaluations"][current] = {
                     "provider": current,
                     "evaluation_model_id": option["model_id"],
@@ -353,7 +424,7 @@ def evaluate_jobs(
     # Each provider retains its own bounded request pool and rate policy.
     # Overlap providers without increasing any individual provider limit.
     with ThreadPoolExecutor(
-        max_workers=3, thread_name_prefix="evaluation-provider"
+        max_workers=max(1, len(options)), thread_name_prefix="evaluation-provider"
     ) as executor:
         futures = [submit(executor, evaluate_batch, option) for option in options]
         for future in futures:

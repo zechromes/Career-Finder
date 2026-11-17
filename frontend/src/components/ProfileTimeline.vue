@@ -5,6 +5,7 @@ import { displayTimelineEntry as display, updateTimelineField } from '../utils/p
 import {
   AcademicCapIcon,
   BriefcaseIcon,
+  CodeBracketIcon,
   PencilSquareIcon,
   PlusIcon,
   TrashIcon,
@@ -50,7 +51,13 @@ function remove(index: number) {
         <span
           class="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
           ><component
-            :is="label === 'Education' ? AcademicCapIcon : BriefcaseIcon"
+            :is="
+              label === 'Education'
+                ? AcademicCapIcon
+                : label === 'Projects'
+                  ? CodeBracketIcon
+                  : BriefcaseIcon
+            "
             class="h-5 w-5"
             aria-hidden="true"
         /></span>

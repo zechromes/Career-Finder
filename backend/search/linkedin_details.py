@@ -19,6 +19,9 @@ from backend.paths import LINKEDIN_DESCRIPTION_CACHE_DIR
 LOGGER = logging.getLogger(__name__)
 # Reuse JobSpy's LinkedIn logger so existing failure reporting shows the 429.
 JOBSPY_LOGGER = logging.getLogger("JobSpy:LinkedIn")
+# LinkedIn's guest pages answer HTTP 429 to quick bursts; space job-page requests.
+REQUEST_INTERVAL_SECONDS = 2.0
+_last_request = [0.0]
 _JOB_ID = re.compile(r"linkedin\.com/jobs/view/(?:[^/?#]*-)?(\d+)")
 _WORD = re.compile(r"[a-z0-9+#]+")
 _STOPWORDS = {"and", "or", "the", "a", "an", "of", "for", "in", "to", "with", "at"}
@@ -111,6 +114,7 @@ class DescriptionCache:
                         "fetched_at": self.clock(),
                         "description": details["description"],
                         "company_logo": details.get("company_logo") or "",
+                        "posted_at": details.get("posted_at") or "",
                     }
                 ),
                 encoding="utf-8",
@@ -134,6 +138,9 @@ def fetch_details(identifier: str, session=None) -> dict:
 
         session = requests.Session()
         session.headers["User-Agent"] = "Mozilla/5.0"
+    # The collector is sequential, so one shared timestamp is enough.
+    time.sleep(max(0.0, _last_request[0] + REQUEST_INTERVAL_SECONDS - time.monotonic()))
+    _last_request[0] = time.monotonic()
     response = session.get(
         f"https://www.linkedin.com/jobs/view/{identifier}", timeout=15
     )
@@ -144,7 +151,14 @@ def fetch_details(identifier: str, session=None) -> dict:
     soup = BeautifulSoup(response.text, "html.parser")
     markup = soup.find("div", class_=lambda x: x and "show-more-less-html__markup" in x)
     logo = soup.find("img", {"class": "artdeco-entity-image"})
+    # The page shows the latest posting ("Reposted 6 days ago"); search cards keep
+    # the original date. Store it as a date so cached copies stay correct.
+    from backend.search.collection import _parse_posted_at
+
+    shown = soup.find(class_="posted-time-ago__text")
+    posted = _parse_posted_at(shown.get_text(" ", strip=True)) if shown else None
     return {
+        "posted_at": posted.date().isoformat() if posted else "",
         "description": (
             (
                 markdown_converter(remove_attributes(markup).prettify(formatter="html"))
@@ -186,6 +200,8 @@ def hydrate(
             fetched += 1
             cache.put(identifier, details)
         job["description"] = details.get("description") or ""
+        if details.get("posted_at"):
+            job["posted_at"] = details["posted_at"]
         if details.get("company_logo") and not job.get("company_logo"):
             job["company_logo"] = details["company_logo"]
     LOGGER.info(

@@ -1,7 +1,6 @@
 <!-- Combine results, apply filters and sorting, and paginate the table or card view. -->
 <script setup lang="ts">
 import DateAdded from './DateAdded.vue'
-import DismissalPreferences from './DismissalPreferences.vue'
 import { RouterLink } from 'vue-router'
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useResultsViewStore, newResultsView, type ResultsView } from '../stores/resultsView'
@@ -12,6 +11,7 @@ import JobActions from './JobActions.vue'
 import CompanyLogo from './CompanyLogo.vue'
 import { Squares2X2Icon, TableCellsIcon } from '@heroicons/vue/24/outline'
 import EmptyState from './EmptyState.vue'
+import { fitChipClass, fitLabel } from '../utils/fitCategory'
 const props = withDefaults(
   defineProps<{
     runId?: string
@@ -19,7 +19,7 @@ const props = withDefaults(
     excludedJobs?: Job[]
     evaluationModelId?: string
     evaluationOptions?: ModelOption[]
-    evaluationErrors?: { title?: string; message?: string; provider?: string }[]
+    evaluationErrors?: { title?: string; message?: string; provider?: string; category?: string }[]
     excelUrl?: string
     running?: boolean
     retryingEvaluations?: boolean
@@ -34,6 +34,36 @@ const props = withDefaults(
   },
 )
 const emit = defineEmits<{ 'retry-evaluation': [] }>()
+const failureReasons: Record<string, string> = {
+  rate_limit: 'Rate limit',
+  quota: 'Quota used up',
+  credentials: 'Key rejected',
+  model: 'Model unavailable',
+  timeout: 'Timed out',
+}
+// One row per model and reason, so a provider outage reads as one line, not one per job.
+const errorGroups = computed(() => {
+  const groups = new Map<
+    string,
+    { model: string; reason: string; message: string; jobs: string[] }
+  >()
+  for (const error of props.evaluationErrors) {
+    const key = `${error.provider}|${error.category}`
+    const model =
+      props.evaluationOptions.find((option) => option.value === error.provider)?.label ||
+      error.provider ||
+      'A model'
+    const group = groups.get(key) || {
+      model,
+      reason: failureReasons[error.category || ''] || 'Failed',
+      message: error.message || '',
+      jobs: [],
+    }
+    group.jobs.push(error.title || 'Untitled job')
+    groups.set(key, group)
+  }
+  return [...groups.values()].sort((a, b) => b.jobs.length - a.jobs.length)
+})
 const store = useJobsStore()
 // View preference is browser-local; result filtering never mutates server snapshots.
 const view = ref<'grid' | 'table'>('grid')
@@ -61,7 +91,6 @@ const sort = field('sort')
 const location = field('location')
 const source = field('source')
 const workType = field('workType')
-const minScore = field('minScore')
 const actionFilter = field('actionFilter')
 const requestedPage = field('page')
 const pageSize = 12
@@ -73,7 +102,6 @@ const activeFilters = computed(
       location.value,
       source.value,
       workType.value,
-      minScore.value > 0,
       actionFilter.value !== 'all',
     ].filter(Boolean).length,
 )
@@ -94,20 +122,26 @@ const locations = computed(() =>
 const sources = computed(() =>
   [...new Set(all.value.map((job) => job.source).filter(Boolean))].sort(),
 )
-// Apply the selected ordering while keeping unscored jobs behind scored matches.
+// A job still waiting for any model assessment has no final verdict yet.
+function waiting(job: Job) {
+  const rows = Object.values(job.model_evaluations || {})
+  return rows.length ? rows.some((row) => row.status === 'pending') : job.score == null
+}
+// Order by verdict, then by shortlist position (older saved jobs fall back to their score),
+// keeping jobs still being assessed last.
 function compareJobs(a: Job, b: Job) {
   if (sort.value === 'match' || sort.value === 'match_asc') {
-    if (a.score == null || b.score == null) {
-      if (a.score == null && b.score != null) return 1
-      if (b.score == null && a.score != null) return -1
-    }
+    if (waiting(a) !== waiting(b)) return waiting(a) ? 1 : -1
     const priority = { strong_match: 0, review: 1, not_suitable: 2 }
     const categoryOrder =
       priority[a.fit_category || 'review'] - priority[b.fit_category || 'review']
-    const order = categoryOrder || (b.score ?? -1) - (a.score ?? -1)
+    const order =
+      categoryOrder ||
+      (b.score ?? -1) - (a.score ?? -1) ||
+      (a.shortlist_rank ?? Infinity) - (b.shortlist_rank ?? Infinity) ||
+      0
     return sort.value === 'match_asc' ? -order : order
   }
-  if (sort.value === 'score') return (b.score ?? -1) - (a.score ?? -1)
   if (sort.value === 'date')
     return (Date.parse(b.posted_at || '') || 0) - (Date.parse(a.posted_at || '') || 0)
   return (a.company || '').localeCompare(b.company || '')
@@ -142,7 +176,6 @@ const filtered = computed(() =>
         (!location.value || job.location === location.value) &&
         (!source.value || job.source === source.value) &&
         (!workType.value || job.work_type === workType.value) &&
-        (!minScore.value || (job.score ?? -1) >= minScore.value) &&
         (actionFilter.value === 'dismissed' ? flags.dismissed : !flags.dismissed) &&
         (actionFilter.value !== 'saved' || flags.saved) &&
         (actionFilter.value !== 'applied' || flags.applied)
@@ -183,7 +216,7 @@ const visible = computed(() =>
   filtered.value.slice((page.value - 1) * pageSize, page.value * pageSize),
 )
 watch(
-  [() => props.runId, search, sort, location, source, workType, minScore, actionFilter],
+  [() => props.runId, search, sort, location, source, workType, actionFilter],
   (value, previous) => {
     if (value[0] === previous[0]) requestedPage.value = 1
   },
@@ -194,14 +227,12 @@ function clear() {
   location.value = ''
   source.value = ''
   workType.value = ''
-  minScore.value = 0
   actionFilter.value = 'all'
 }
 </script>
 <!-- Render the accessible interface from the state and handlers above. -->
 <template>
   <section class="mt-6" aria-label="Job results">
-    <DismissalPreferences />
     <header class="mb-5 flex flex-wrap items-start justify-between gap-3">
       <div>
         <h2 class="text-2xl font-bold">
@@ -223,31 +254,60 @@ function clear() {
     </header>
     <section
       v-if="evaluationErrors.length || retryingEvaluations"
-      class="mb-5 rounded-xl bg-amber-50 dark:bg-amber-950 p-4 text-amber-900 dark:text-amber-300"
+      aria-labelledby="assessment-issues-title"
+      class="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
     >
-      <h3 class="font-semibold">{{ evaluationErrors.length }} model assessments failed</h3>
-      <ul class="mt-2 text-sm">
-        <li v-for="(error, index) in evaluationErrors" :key="index">
-          {{ error.title }}{{ error.provider ? ` (${error.provider})` : '' }} — {{ error.message }}
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="min-w-0">
+          <h3 id="assessment-issues-title" class="font-semibold">
+            {{
+              retryingEvaluations
+                ? 'Retrying failed assessments…'
+                : `${evaluationErrors.length} model ${evaluationErrors.length === 1 ? 'assessment' : 'assessments'} failed`
+            }}
+          </h3>
+          <p role="status" class="mt-0.5 text-sm">
+            {{
+              retryingEvaluations
+                ? 'Successful assessments are kept; results update as retries finish.'
+                : 'Verdicts from the other models are kept.'
+            }}
+          </p>
+        </div>
+        <button
+          class="btn-secondary shrink-0"
+          :disabled="running || busy || retryingEvaluations"
+          :aria-busy="!!retryingEvaluations"
+          @click="emit('retry-evaluation')"
+        >
+          <span
+            v-if="retryingEvaluations"
+            aria-hidden="true"
+            class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-r-transparent motion-reduce:animate-none"
+          />
+          {{ retryingEvaluations ? 'Retrying evaluations…' : 'Retry failed evaluations' }}
+        </button>
+      </div>
+      <ul v-if="errorGroups.length" class="mt-3 flex flex-wrap gap-2" aria-label="Failures by model">
+        <li
+          v-for="group in errorGroups"
+          :key="group.model + group.reason"
+          class="rounded-full bg-white px-3 py-1 text-xs font-semibold text-amber-900 ring-1 ring-amber-200 dark:bg-amber-900 dark:text-amber-100 dark:ring-amber-700"
+        >
+          {{ group.model }} · {{ group.reason }} · {{ group.jobs.length }}
+          {{ group.jobs.length === 1 ? 'job' : 'jobs' }}
         </li>
       </ul>
-      <button
-        class="btn-secondary mt-3"
-        :disabled="running || busy || retryingEvaluations"
-        :aria-busy="!!retryingEvaluations"
-        @click="emit('retry-evaluation')"
-      >
-        <span
-          v-if="retryingEvaluations"
-          aria-hidden="true"
-          class="inline-block h-4 w-4 mr-2 rounded-full border-2 border-current border-r-transparent animate-spin motion-reduce:animate-none"
-        />
-        {{ retryingEvaluations ? 'Retrying evaluations…' : 'Retry failed evaluations' }}
-      </button>
-      <p v-if="retryingEvaluations" role="status" class="mt-2 text-sm">
-        Retrying failed assessments. Successful assessments are kept; results update as retries
-        finish.
-      </p>
+      <details v-if="errorGroups.length" class="mt-3 text-sm">
+        <summary class="cursor-pointer font-medium">Show details and affected jobs</summary>
+        <div class="mt-2 max-h-56 space-y-3 overflow-y-auto pr-2">
+          <section v-for="group in errorGroups" :key="group.model + group.reason">
+            <h4 class="font-semibold">{{ group.model }} · {{ group.reason }}</h4>
+            <p class="mt-0.5">{{ group.message }}</p>
+            <p class="mt-1 text-amber-800 dark:text-amber-300">{{ group.jobs.join(' · ') }}</p>
+          </section>
+        </div>
+      </details>
     </section>
     <p
       v-if="store.storageError"
@@ -279,7 +339,6 @@ function clear() {
           ><select v-model="sort" class="field">
             <option value="match">Best match</option>
             <option value="match_asc">Lowest match first</option>
-            <option value="score">Match score (highest first)</option>
             <option value="date">Posting date</option>
             <option value="company">Company</option>
           </select></label
@@ -307,10 +366,6 @@ function clear() {
             </option>
           </select></label
         >
-        <label
-          ><span class="field-label">Minimum score</span
-          ><input v-model.number="minScore" type="number" min="0" max="100" class="field"
-        /></label>
         <label
           ><span class="field-label">Job actions</span
           ><select v-model="actionFilter" class="field">
@@ -438,17 +493,13 @@ function clear() {
                 </div>
               </th>
               <td class="p-4">
-                <p class="font-semibold">
-                  {{ job.score == null ? 'Unscored' : `${job.score}/100` }}
-                </p>
-                <p class="mt-1">
-                  {{
-                    job.fit_category === 'strong_match'
-                      ? 'Strong match'
-                      : job.fit_category === 'not_suitable'
-                        ? 'Not recommended'
-                        : 'For review'
-                  }}
+                <span
+                  class="inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold"
+                  :class="fitChipClass(job.fit_category)"
+                  >{{ fitLabel(job.fit_category) }}</span
+                >
+                <p v-if="job.score != null" class="mt-1.5 text-xs text-slate-600 dark:text-slate-300">
+                  {{ job.score }}/100
                 </p>
               </td>
               <td class="p-4">

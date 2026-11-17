@@ -25,7 +25,7 @@ Deleting a run does not delete its separately saved resume, and deleting a saved
 
 ## Structure goals
 
-1. **Docs:** the current project context is `docs/project-context.md` and the requirements are `docs/PRD.md`. Keep them outside any archive and keep every reference to them up to date. Put truly historical documents in `docs/archive/`.
+1. **Docs:** the maintained documents are `README.md` and `docs/PRD.md`, `docs/Architecture.md` (current project context), `docs/DEVELOPMENT.md`, `docs/DECISIONS.md` and `docs/ROADMAP.md`. Keep them outside any archive and keep every reference to them up to date. Put truly historical documents in `docs/archive/`.
 2. **Skills:** keep project skills in `agents/skills/<name>/SKILL.md`, one folder per skill, and the root `AGENTS.md` short.
 3. **Evaluation:** keep datasets and results under `evaluation/`, apart from runtime data.
 4. **Generated types:** OpenAPI exports and generated TypeScript types must stay in sync with backend schemas. Report drift but do not regenerate silently.

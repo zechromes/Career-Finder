@@ -1,7 +1,6 @@
 // Provide synthetic API responses and browser persistence for isolated UI tests.
 import { http, HttpResponse, delay } from 'msw'
-import { reviewDatasetHandlers } from './reviewDatasets'
-import { experimentHandlers } from './experiments'
+import { playgroundHandlers } from './playground'
 import type { Run, Profile, Job, Preferences } from '../types/domain'
 const profile: Profile = {
   name: 'Alex Example',
@@ -13,6 +12,10 @@ const profile: Profile = {
   preferred_domains: ['Python Developer'],
   work_history: ['Developer, Example, 2024–2026'],
   education: ['Bachelor of Computing'],
+  section_headings: ['Experience', 'Education', 'Projects', 'Certifications'],
+  sections: [{ heading: 'Projects', entries: ['Job tracker | Personal | 2026 | Python and SQL'] }],
+  target_roles_reason: 'Two years of Python development fit junior developer roles.',
+  source_text: '',
   career_level: 'junior',
 }
 const job: Job = {
@@ -119,6 +122,18 @@ function snapshot() {
         error: scenario() === 'scrape-failure' ? 'Scraper timed out. Retry scraping.' : null,
         scrape_errors:
           scenario() === 'scrape-failure' ? ['LinkedIn description request failed.'] : [],
+        skipped_models:
+          scenario() === 'model-skipped'
+            ? [
+                'Google Gemini · gemini-4-argon was skipped: Provider quota is exhausted. Verdicts use the remaining models; retry it once it is available.',
+              ]
+            : [],
+        busy_boards:
+          scenario() === 'board-busy'
+            ? [
+                'LinkedIn limited how many jobs could be loaded this time, so you may see fewer jobs from it. Nothing needs to change on your side.',
+              ]
+            : [],
         phases: { '1': 'done', '2': 'done', '3': 'done', '4': 'done' },
       })
   }
@@ -153,9 +168,13 @@ let profiles: SavedProfile[] = JSON.parse(localStorage.getItem('career-demo-prof
 function persistProfiles() {
   localStorage.setItem('career-demo-profiles', JSON.stringify(profiles))
 }
+const apiKeys: { provider: string; label: string; source: string | null; hint: string }[] = [
+  { provider: 'openai', label: 'OpenAI GPT', source: null, hint: '' },
+  { provider: 'anthropic', label: 'Anthropic Claude', source: null, hint: '' },
+  { provider: 'google', label: 'Google Gemini', source: null, hint: '' },
+]
 export const handlers = [
-  ...experimentHandlers,
-  ...reviewDatasetHandlers,
+  ...playgroundHandlers,
   http.get('/api/searches/:id/actions', () => {
     const key = 'career-demo-actions:' + (run?.saved_profile_id || run?.id || '')
     return HttpResponse.json({
@@ -257,6 +276,17 @@ export const handlers = [
     return HttpResponse.json({ id: 'continued', runId: 'continued' }, { status: 201 })
   }),
   http.get('/api/config', () => HttpResponse.json({ evaluation_provider: 'claude' })),
+  http.get('/api/settings/keys', () => HttpResponse.json(apiKeys)),
+  http.put('/api/settings/keys/:provider', ({ params }) => {
+    const item = apiKeys.find((key) => key.provider === params.provider)
+    if (item) Object.assign(item, { source: 'settings', hint: '…mock' })
+    return HttpResponse.json(apiKeys)
+  }),
+  http.delete('/api/settings/keys/:provider', ({ params }) => {
+    const item = apiKeys.find((key) => key.provider === params.provider)
+    if (item) Object.assign(item, { source: null, hint: '' })
+    return HttpResponse.json(apiKeys)
+  }),
   http.get('/api/models/resume', () =>
     HttpResponse.json([
       { value: 'openai', label: 'gpt-4o-mini' },
@@ -293,6 +323,8 @@ export const handlers = [
       evaluation_total: 0,
       evaluated_jobs: 0,
       evaluation_failed: 0,
+      retry_total: 0,
+      retry_done: 0,
       displayed_jobs: 0,
       excluded_jobs: 0,
       evaluation_model: 'claude',

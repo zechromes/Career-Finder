@@ -33,6 +33,30 @@ const canFindMore = computed(
     !store.running &&
     ['complete', 'error', 'cancelled'].includes(store.run.status),
 )
+// Gather warnings into one panel so they do not push the job list down.
+const notices = computed(() =>
+  [
+    { title: 'Some job-board searches failed', messages: store.run?.scrape_errors || [] },
+    { title: 'Some models were skipped', messages: store.run?.skipped_models || [] },
+    { title: 'Fewer jobs from some boards', messages: store.run?.busy_boards || [] },
+    {
+      title: 'Profile not saved',
+      messages: store.run?.profile_save_error ? [store.run.profile_save_error] : [],
+    },
+  ].filter((group) => group.messages.length),
+)
+const noticeCount = computed(() =>
+  notices.value.reduce((total, group) => total + group.messages.length, 0),
+)
+// Open by default only when the search needs attention; otherwise the reader chooses.
+const noticesOpen = ref(false)
+watch(
+  () => [store.run?.status, store.run?.profile_save_error],
+  ([status, saveError]) => {
+    if (status === 'error' || saveError) noticesOpen.value = true
+  },
+  { immediate: true },
+)
 const showingResults = computed(() => store.run?.status === 'complete' && !editing.value)
 const navigableSteps = computed(() => {
   if (store.running || store.busy || !store.run?.profile) return []
@@ -224,21 +248,41 @@ function edit() {
             : 'You can review your profile and start again.'
       }}
     </p>
-    <section
-      v-if="store.run.scrape_errors?.length"
-      class="mb-4 rounded-xl bg-amber-50 dark:bg-amber-950 p-4 text-sm text-amber-900 dark:text-amber-300"
+    <details
+      v-if="noticeCount"
+      :open="noticesOpen"
+      class="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
+      @toggle="noticesOpen = ($event.target as HTMLDetailsElement).open"
     >
-      <h2 class="font-semibold">Some job-board searches failed</h2>
-      <p v-for="(message, index) in store.run.scrape_errors" :key="index">{{ message }}</p>
+      <summary class="cursor-pointer font-semibold">
+        {{ noticeCount }} search {{ noticeCount === 1 ? 'notice' : 'notices' }}
+      </summary>
+      <!-- Long notices scroll inside the panel instead of pushing the results down. -->
+      <div class="mt-3 max-h-48 space-y-3 overflow-y-auto pr-2">
+        <section v-for="group in notices" :key="group.title">
+          <h2 class="font-semibold">{{ group.title }}</h2>
+          <p v-for="(message, index) in group.messages" :key="index" class="mt-0.5">
+            {{ message }}
+          </p>
+        </section>
+      </div>
       <button
-        v-if="!store.running"
+        v-if="store.run.scrape_errors?.length && !store.running"
         class="btn-secondary mt-3"
         :disabled="store.busy"
         @click="store.action('retry-scraping')"
       >
         Retry scraping
       </button>
-    </section>
+      <button
+        v-if="store.run.skipped_models?.length && !store.running"
+        class="btn-secondary mt-3 ml-2"
+        :disabled="store.busy"
+        @click="store.action('retry-evaluation')"
+      >
+        Retry skipped models
+      </button>
+    </details>
     <p
       v-if="
         store.run.status === 'complete' &&
@@ -249,13 +293,6 @@ function edit() {
       class="panel mb-4"
     >
       Your resume profile and search preferences are saved. You can return from Saved resumes.
-    </p>
-    <p
-      v-if="store.run.profile_save_error"
-      role="alert"
-      class="panel mb-4 text-amber-900 dark:text-amber-200"
-    >
-      {{ store.run.profile_save_error }}
     </p>
     <SaveProfile
       :run-id="store.runId"
@@ -284,6 +321,7 @@ function edit() {
       :models="store.modelOptions"
       :disabled="store.busy"
       :search-only="findingMore"
+      :previous-searches="store.run.searches || []"
       @confirm="confirm"
     />
     <JobDashboard
@@ -297,7 +335,7 @@ function edit() {
       :running="store.running"
       :retrying-evaluations="
         store.activeAction === 'retry-evaluation' ||
-        (store.running && store.run.message === 'Retrying failed evaluations only')
+        (store.running && !!store.run.retry_total)
       "
       :busy="store.busy"
       :excel-url="`/api/searches/${store.runId}/exports/relevant_jobs.xlsx`"

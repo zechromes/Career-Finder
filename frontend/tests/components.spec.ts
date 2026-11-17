@@ -42,6 +42,31 @@ it('shows retry loading and restores the action after retry finishes', async () 
   expect(button().text()).toBe('Retry failed evaluations')
   expect(button().attributes('disabled')).toBeUndefined()
 })
+it('groups failed assessments by model and reason instead of listing every job', () => {
+  const wrapper = mount(JobDashboard, {
+    props: {
+      evaluationOptions: [{ value: 'claude', label: 'Anthropic Claude' }],
+      evaluationErrors: [
+        { title: 'Developer', provider: 'claude', category: 'credentials', message: 'Key rejected' },
+        { title: 'Analyst', provider: 'claude', category: 'credentials', message: 'Key rejected' },
+        { title: 'Tester', provider: 'gpt', category: 'rate_limit', message: 'Too many requests' },
+      ],
+    },
+  })
+  const chips = wrapper.findAll('[aria-label="Failures by model"] li').map((item) => item.text())
+  expect(chips).toEqual(['Anthropic Claude · Key rejected · 2 jobs', 'gpt · Rate limit · 1 job'])
+  expect(wrapper.find('details').text()).toContain('Developer · Analyst')
+})
+it('shows the verdict as a colored chip in the results table', async () => {
+  const wrapper = mount(JobDashboard, {
+    props: { jobs: [job, { ...job, jobId: 'b', apply_url: 'https://example.com/b', fit_category: 'review' }] },
+  })
+  await wrapper.findAll('button').find((item) => item.text().includes('Table'))!.trigger('click')
+  const chips = wrapper.findAll('tbody td span.rounded-full')
+  expect(chips.map((chip) => chip.text())).toEqual(['Strong match', 'For review'])
+  expect(chips[0].classes()).toContain('bg-emerald-50')
+  expect(chips[1].classes()).toContain('bg-amber-50')
+})
 // Reset shared fixtures and mocks between test cases.
 beforeEach(() => {
   setActivePinia(createPinia())
@@ -251,7 +276,7 @@ it('combines recommended and excluded jobs without category tabs', async () => {
   expect(wrapper.get('table').text()).toContain('Not recommended')
 })
 
-it('sorts best matches by verdict then score with unscored jobs last in cards and table', async () => {
+it('sorts best matches by verdict then score with jobs still being assessed last', async () => {
   const wrapper = mount(JobDashboard, {
     props: {
       jobs: [
@@ -278,9 +303,7 @@ it('sorts best matches by verdict then score with unscored jobs last in cards an
     .findAll('select')
     .find((select) => select.find('option[value="match"]').exists())!
   expect((sort.element as HTMLSelectElement).value).toBe('match')
-  await sort.setValue('score')
-  expect(titles()[0]).toBe('Review role')
-  await sort.setValue('match')
+  expect(sort.find('option[value="score"]').exists()).toBe(false)
   await wrapper
     .findAll('button')
     .find((button) => button.text() === 'Table')!
@@ -288,6 +311,56 @@ it('sorts best matches by verdict then score with unscored jobs last in cards an
   expect(
     wrapper.findAll('tbody th[scope="row"] > div > div > span').map((item) => item.text()),
   ).toEqual(expected)
+})
+
+it('orders model verdicts without scores by shortlist position', async () => {
+  const done = { claude: { status: 'complete' } }
+  const wrapper = mount(JobDashboard, {
+    props: {
+      jobs: [
+        {
+          ...job,
+          jobId: 'b',
+          title: 'Second',
+          score: null,
+          shortlist_rank: 1,
+          model_evaluations: done,
+        },
+        {
+          ...job,
+          jobId: 'w',
+          title: 'Waiting',
+          score: null,
+          shortlist_rank: 0,
+          model_evaluations: { claude: { status: 'pending' } },
+        },
+        {
+          ...job,
+          jobId: 'r',
+          title: 'Review',
+          fit_category: 'review',
+          score: null,
+          shortlist_rank: 0,
+          model_evaluations: done,
+        },
+        {
+          ...job,
+          jobId: 'a',
+          title: 'First',
+          score: null,
+          shortlist_rank: 0,
+          model_evaluations: done,
+        },
+      ] as any,
+    },
+  })
+  expect(wrapper.findAll('article h3').map((item) => item.text())).toEqual([
+    'First',
+    'Second',
+    'Review',
+    'Waiting',
+  ])
+  expect(wrapper.text()).not.toContain('Score unavailable')
 })
 
 it('toggles match ordering from the table header and keeps unscored jobs last', async () => {

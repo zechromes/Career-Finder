@@ -20,7 +20,7 @@ def settings():
         "batches": _setting("JOB_COLLECTION_MAX_BATCHES", 12, 100),
         "details": _setting("JOB_COLLECTION_MAX_DETAILS", 60, 500),
         "candidates": _setting("JOB_COLLECTION_MAX_CANDIDATES", 150, 1000),
-        "seconds": _setting("JOB_COLLECTION_MAX_SECONDS", 120, 900),
+        "seconds": _setting("JOB_COLLECTION_MAX_SECONDS", 240, 900),
     }
 
 
@@ -40,7 +40,13 @@ class Stream:
     @property
     def size(self):
         # Align offset-based boards to their native search-page boundaries.
-        return {"linkedin": 10, "glassdoor": 30, "seek": 20}.get(self.board, 20)
+        # Adzuna's largest page (50) gets the most jobs per limited free-tier call.
+        return {
+            "linkedin": 10,
+            "seek": 20,
+            "google": 10,
+            "adzuna": 50,
+        }.get(self.board, 20)
 
 
 class Budget:
@@ -50,12 +56,19 @@ class Budget:
         self.clock = clock
         self.deadline = clock() + config["seconds"]
         self.batches = self.details = 0
+        # Set once search rounds end: descriptions of collected cards are then read
+        # without the time or fetch limits; only cancellation stops them.
+        self.finishing = False
 
     def stopped(self):
-        return self.cancelled() or self.clock() >= self.deadline
+        return self.cancelled() or (
+            not self.finishing and self.clock() >= self.deadline
+        )
 
     def can_detail(self):
-        return not self.stopped() and self.details < self.config["details"]
+        return not self.stopped() and (
+            self.finishing or self.details < self.config["details"]
+        )
 
     def fetch_detail(self, operation, job):
         # The collector is sequential; each admitted fetch consumes one slot.
@@ -113,14 +126,21 @@ def collect(
 
     def enrich(rows):
         nonlocal results
-        if not rows or budget.stopped():
+        if not rows:
+            return
+        if budget.stopped():
+            pending.extend(rows)
             return
         hydrated = hydrate(rows, budget)
         with collection_step("filter_descriptions") as trace:
             accepted = []
             for job in hydrated:
                 if not job.get("description"):
-                    ingestion_log.drop(job, "description", "no usable description")
+                    if budget.can_detail():
+                        ingestion_log.drop(job, "description", "no usable description")
+                    else:
+                        # Skipped for a round limit; read it at the checkpoint.
+                        pending.append(job)
                 elif final(job):
                     accepted.append(job)
             if trace is not None:
@@ -135,10 +155,20 @@ def collect(
         if on_progress:
             on_progress(len(results))
 
+    def waiting():
+        # Cards that still need a fetched description (inline or cached text needs none).
+        return sum(not job.get("description") for job in pending)
+
+    def budget_filled():
+        return waiting() >= config["details"] - budget.details
+
+    # After every combination's first page, stop searching once waiting cards would
+    # use the remaining fetch budget, so each collected card is read at the checkpoint.
     while (
         budget.batches < config["batches"]
         and not budget.stopped()
         and len(results) < config["candidates"]
+        and (unvisited or not budget_filled())
     ):
         if unvisited:
             stream = unvisited.pop(0)
@@ -219,7 +249,12 @@ def collect(
             stream.useful += len(results) - before
             if batch_trace is not None:
                 batch_trace["result_count"] = len(results) - before
-    # Spend remaining detail capacity on collected candidates before ending.
+    # Checkpoint: card collection is over; read every remaining description.
+    budget.finishing = True
+    if pending and not budget.cancelled():
+        status(
+            f"Job search finished; reading descriptions for {len(pending)} collected postings…"
+        )
     deferred_round = 1
     while pending and not budget.stopped() and len(results) < config["candidates"]:
         with collection_batch("mixed", deferred_round, deferred=True) as batch_trace:
@@ -243,9 +278,11 @@ def collect(
     reason = (
         "time budget reached"
         if budget.clock() >= budget.deadline
+        else "description budget filled"
+        if budget.details >= config["details"]
         else "collection finished"
     )
     status(
-        f"Adaptive {reason}: {len(results)} eligible postings; {budget.batches}/{config['batches']} search batches, {budget.details}/{config['details']} new description fetches; {coverage}/{len(streams)} search combinations visited. Find more jobs can expand the pool."
+        f"Adaptive {reason}: {len(results)} eligible postings; {budget.batches}/{config['batches']} search batches, {budget.details} new description fetches; {coverage}/{len(streams)} search combinations visited. Find more jobs can expand the pool."
     )
     return results

@@ -1,6 +1,7 @@
 """Run status, progress, cancellation, deletion, and export handlers."""
 
 import json
+import logging
 import asyncio
 from fastapi import HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
@@ -105,6 +106,53 @@ async def stream_search_progress(run_id: str, request: Request):
     )
 
 
+def _result_row(run, key):
+    """The saved result row a job key (apply URL or jobId) names, or None."""
+    from backend.search.preferences import action_key
+
+    return next(
+        (
+            item
+            for field in ("recommendations", "excluded_recommendations")
+            for item in run.get(field, [])
+            if action_key(item) == action_key({"apply_url": key}) or item.get("jobId") == key
+        ),
+        None,
+    )
+
+
+def tailored_resume(run_id, key):
+    """Write a resume for one job from the saved profile and keep it with that job.
+
+    The model call happens outside the lock; the result is attached to the job afterwards.
+    """
+    import copy
+
+    from backend.evaluation.runtime import classify_failure
+    from backend.profiles import tailoring
+
+    with runs.RUNS_LOCK:
+        runs.snapshot(run_id)
+        run = runs.RUNS[run_id]
+        row = _result_row(run, key)
+        if row is None:
+            raise HTTPException(404, "This job is not in this search's results.")
+        if not run.get("profile"):
+            raise HTTPException(409, "Upload your resume before generating a tailored one.")
+        profile, job = copy.deepcopy(run["profile"]), copy.deepcopy(row)
+    try:
+        resume = tailoring.generate(profile, job)
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Tailored resume failed: %s", type(exc).__name__)
+        raise HTTPException(503, str(classify_failure(exc))) from None
+    with runs.RUNS_LOCK:
+        row = _result_row(runs.RUNS.get(run_id, {}), key)
+        if row is not None:
+            row["tailored_resume"] = resume
+            runs.persist_run(run_id)
+    return resume
+
+
 def job_actions(run_id, update=None):
     """Serialize edits with profile saves so action updates survive new runs and expiry."""
     from backend.profiles import storage
@@ -122,6 +170,10 @@ def job_actions(run_id, update=None):
                     raise
         actions = dict((profile or run).get("job_actions", {}))
         feedback = dict((profile or run).get("dismissal_feedback", {}))
+
+        def row_for(key):
+            return _result_row(run, key)
+
         if update is not None:
             if len(actions) >= 10000 and update.key not in actions:
                 raise HTTPException(422, "Saved job action limit reached.")
@@ -131,18 +183,9 @@ def job_actions(run_id, update=None):
                 ):
                     feedback.pop(update.key, None)
                 elif update.dismissal is not None:
-                    from backend.search.preferences import action_key, make_preference
+                    from backend.search.preferences import make_preference
 
-                    job = next(
-                        (
-                            item
-                            for field in ("recommendations", "excluded_recommendations")
-                            for item in run.get(field, [])
-                            if action_key(item) == action_key({"apply_url": update.key})
-                            or item.get("jobId") == update.key
-                        ),
-                        None,
-                    )
+                    job = row_for(update.key)
                     if job is None:
                         raise HTTPException(
                             422,
@@ -160,4 +203,11 @@ def job_actions(run_id, update=None):
             run["job_actions"] = actions
             run["dismissal_feedback"] = feedback
             runs.persist_run(run_id)
+            # The action is saved first; a dataset failure is logged, never lost as an action.
+            from backend.evaluation import action_dataset
+
+            try:
+                action_dataset.sync(run, profile_id or run_id, actions, feedback, row_for)
+            except Exception:
+                logging.getLogger(__name__).exception("Could not update the job-action dataset")
         return {"actions": actions, "dismissal_feedback": feedback}

@@ -9,7 +9,6 @@ export function newResultsView() {
     location: '',
     source: '',
     workType: '',
-    minScore: 0,
     actionFilter: 'all',
     page: 1,
   }

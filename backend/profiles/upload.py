@@ -1,10 +1,8 @@
 """Profiles upload operations, separate from HTTP route declarations."""
 
 from backend.observability import stage, mark
-import json
 import os
 import io
-import shutil
 import time
 import uuid
 from pathlib import Path
@@ -69,15 +67,9 @@ def validate_resume_document(text: str) -> None:
 @stage("resume.classify_extract")
 def classify_and_extract_resume(text: str) -> ResumeProfile:
     """One provider call; accepted profiles are validated before allocating a workspace."""
-    from langchain_openai import ChatOpenAI
-
     try:
-        llm = ChatOpenAI(
-            model=os.getenv("OPENAI_UPLOAD_MODEL")
-            or extraction.profile_model_id("openai"),
-            timeout=90.0,
-            max_retries=1,
-            temperature=0,
+        llm = extraction.profile_llm(
+            os.getenv("OPENAI_UPLOAD_MODEL") or extraction.profile_model_id("openai")
         )
         result = llm.with_structured_output(ResumeIntake).invoke(
             [
@@ -108,7 +100,8 @@ def classify_and_extract_resume(text: str) -> ResumeProfile:
         raise ValueError(
             "We could not identify a resume/CV in this file. Please upload a clearer resume or CV PDF."
         )
-    return result.profile
+    # Keep the original text so evaluators can quote what extraction missed.
+    return ResumeProfile(**result.profile.model_dump(), source_text=text)
 
 
 @stage("resume.profile")
@@ -146,8 +139,7 @@ def execute_profile(
         # Recheck cancellation before publishing context for later job searches.
         with runs.RUNS_LOCK:
             runs.check_running(run_id)
-            runs.RUN_CONTEXTS[run_id] = resume_context
-            runs.run_context_path(run_id).write_text(resume_context, encoding="utf-8")
+            runs.write_context(run_id, resume_context)
         runs.update_run(
             run_id,
             phase=1,
@@ -250,18 +242,14 @@ async def upload_resume(
         raise HTTPException(422, str(exc)) from None
 
     run_id = uuid.uuid4().hex
-    run_dir = runs.RUNS_DIR / run_id
-    run_dir.mkdir(parents=True)
-    resume_path = run_dir / "resume.pdf"
-    try:
-        resume_path.write_bytes(data)
-    except Exception:
-        shutil.rmtree(run_dir, ignore_errors=True)
-        raise
+    # Nothing is written to disk until the user searches or saves the profile;
+    # an abandoned upload lives only in memory.
+    resume_path = runs.RUNS_DIR / run_id / "resume.pdf"
 
-    # Create the initial run in memory and save its first snapshot together.
+    # Create the initial run in memory only.
     # Other lock-using requests must not see a partly initialized workspace.
     with runs.RUNS_LOCK:
+        runs.UNSAVED[run_id] = data
         runs.RUNS[run_id] = {
             "id": run_id,
             "created_at": time.time(),
@@ -278,9 +266,6 @@ async def upload_resume(
             "excluded_recommendations": [],
             "recommendations": [],
         }
-        runs.run_state_path(run_id).write_text(
-            json.dumps(runs.RUNS[run_id], indent=2), encoding="utf-8"
-        )
 
     # Register profile persistence as active before it starts.
     # Deletion waits until this worker has finished with the workspace.

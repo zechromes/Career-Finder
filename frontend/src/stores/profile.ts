@@ -13,19 +13,23 @@ export const useProfileStore = defineStore('profile', () => {
     preferred_domains: [],
     work_history: [],
     education: [],
+    section_headings: [],
+    sections: [],
+    target_roles_reason: '',
+    source_text: '',
     career_level: 'unknown',
     experience_evidence: [],
   })
   const preferences = ref<Preferences>({
     queries: [],
     locations: [],
-    platforms: ['linkedin', 'indeed', 'glassdoor'],
+    platforms: ['linkedin', 'indeed'],
     work_type: 'any',
     seniority: 'auto',
     exclusions: [],
     posted_days_old: 7,
     evaluation_model: 'claude',
-    top_k: 50,
+    top_k: -1,
   })
   // Initialize editable drafts from saved preferences or legacy search inputs.
   function load(
@@ -37,18 +41,18 @@ export const useProfileStore = defineStore('profile', () => {
     preferences.value = {
       queries: [...(draft.value.preferred_domains || [])],
       locations: [],
-      platforms: ['linkedin', 'indeed', 'glassdoor'],
+      platforms: ['linkedin', 'indeed'],
       work_type: 'any',
       seniority: 'auto',
       exclusions: [],
       posted_days_old: 7,
-      top_k: 50,
+      top_k: -1,
       evaluation_model: defaultModel as Preferences['evaluation_model'],
       ...saved,
       ...(saved.platforms
         ? {
             platforms: saved.platforms.filter((site) =>
-              ['linkedin', 'indeed', 'glassdoor', 'seek'].includes(site),
+              ['linkedin', 'indeed', 'seek', 'google', 'adzuna'].includes(site),
             ),
           }
         : {}),

@@ -5,38 +5,28 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { usePipelineStore } from '../stores/pipeline'
 import { jobKey, useJobsStore } from '../stores/jobs'
 import EvaluationEvidence from '../components/EvaluationEvidence.vue'
+import TailoredResume from '../components/TailoredResume.vue'
 import JobActions from '../components/JobActions.vue'
 import CompanyLogo from '../components/CompanyLogo.vue'
 import JobDescription from '../components/JobDescription.vue'
 import ErrorState from '../components/ErrorState.vue'
 import EmptyState from '../components/EmptyState.vue'
+import Tabs from '../components/Tabs.vue'
+import { fitChipClass, fitLabel } from '../utils/fitCategory'
 const route = useRoute()
 const router = useRouter()
 const tabs = [
-  { key: 'overview', label: 'Overview' },
-  { key: 'description', label: 'Job description' },
-  { key: 'evaluation', label: 'Evaluation evidence' },
+  { value: 'overview', label: 'Overview' },
+  { value: 'description', label: 'Job description' },
+  { value: 'evaluation', label: 'Evaluation evidence' },
+  { value: 'resume', label: 'Tailored resume' },
 ]
 const activeTab = computed(() =>
-  tabs.some((tab) => tab.key === route.query.section) ? String(route.query.section) : 'overview',
+  tabs.some((tab) => tab.value === route.query.section) ? String(route.query.section) : 'overview',
 )
 // Keep the selected detail section in the URL for deep-link navigation.
 function selectTab(key: string) {
   router.replace({ query: { ...route.query, section: key } })
-}
-// Support arrow and boundary keys while moving focus between tabs.
-function navigateTabs(event: KeyboardEvent) {
-  const index = tabs.findIndex((tab) => tab.key === activeTab.value)
-  const next =
-    event.key === 'Home'
-      ? 0
-      : event.key === 'End'
-        ? tabs.length - 1
-        : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length
-  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
-  event.preventDefault()
-  selectTab(tabs[next].key)
-  document.getElementById(`job-tab-${tabs[next].key}`)?.focus()
 }
 const store = usePipelineStore()
 const actions = useJobsStore()
@@ -66,12 +56,7 @@ const postedDate = computed(() => {
     ? date.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })
     : 'Not provided by the job board'
 })
-const verdict = computed(
-  () =>
-    ({ strong_match: 'Strong match', review: 'For review', not_suitable: 'Not recommended' })[
-      job.value?.fit_category || 'review'
-    ],
-)
+const verdict = computed(() => fitLabel(job.value?.fit_category))
 watch(
   runId,
   async (id) => {
@@ -146,32 +131,13 @@ onBeforeUnmount(() => store.stop())
         <p v-else class="text-sm">Application link unavailable</p>
       </div>
     </header>
-    <div
-      role="tablist"
-      aria-label="Job detail sections"
-      class="flex flex-wrap border-b border-slate-200 dark:border-slate-700"
-      @keydown="navigateTabs"
-    >
-      <button
-        v-for="tab in tabs"
-        :id="`job-tab-${tab.key}`"
-        :key="tab.key"
-        type="button"
-        role="tab"
-        :aria-selected="activeTab === tab.key"
-        :aria-controls="`job-panel-${tab.key}`"
-        :tabindex="activeTab === tab.key ? 0 : -1"
-        @click="selectTab(tab.key)"
-        class="min-h-11 border-b-2 px-4 py-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500"
-        :class="
-          activeTab === tab.key
-            ? 'border-indigo-600 text-indigo-700 dark:border-indigo-400 dark:text-indigo-300'
-            : 'border-transparent text-slate-600 hover:text-indigo-700 dark:text-slate-300'
-        "
-      >
-        {{ tab.label }}
-      </button>
-    </div>
+    <Tabs
+      :tabs="tabs"
+      :model-value="activeTab"
+      label="Job detail sections"
+      id-prefix="job"
+      @update:model-value="selectTab"
+    />
     <section
       v-show="activeTab === 'overview'"
       id="job-panel-overview"
@@ -184,20 +150,13 @@ onBeforeUnmount(() => store.stop())
         <h2 id="overall-assessment-heading" class="text-xl font-bold">Overall assessment</h2>
         <span
           class="rounded-full px-4 py-2 text-sm font-semibold"
-          :class="
-            job.fit_category === 'strong_match'
-              ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
-              : job.fit_category === 'not_suitable'
-                ? 'bg-rose-50 text-rose-800 dark:bg-rose-950 dark:text-rose-200'
-                : 'bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-200'
-          "
+          :class="fitChipClass(job.fit_category)"
           >{{ verdict }}</span
         >
       </div>
-      <p class="mt-4 text-2xl font-bold">
-        {{ job.score == null ? 'Score unavailable' : `${job.score} / 100`
+      <p v-if="job.score != null" class="mt-4 text-2xl font-bold">
+        {{ `${job.score} / 100`
         }}<span
-          v-if="job.score != null"
           class="ml-3 text-sm font-normal text-slate-600 dark:text-slate-300"
           >{{
             Object.keys(job.model_evaluations || {}).length ? 'Average model score' : 'Match score'
@@ -232,6 +191,15 @@ onBeforeUnmount(() => store.stop())
       tabindex="0"
     >
       <EvaluationEvidence :job="job" />
+    </div>
+    <div
+      v-show="activeTab === 'resume'"
+      id="job-panel-resume"
+      role="tabpanel"
+      aria-labelledby="job-tab-resume"
+      tabindex="0"
+    >
+      <TailoredResume :job="job" :run-id="runId" />
     </div>
   </div>
   <p v-else-if="store.running" class="panel" role="status">

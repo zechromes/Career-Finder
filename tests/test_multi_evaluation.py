@@ -1,6 +1,8 @@
 # Regression coverage for multi evaluation; fixtures and assertions document the expected behavior.
+import os
 import unittest
 import threading
+import time
 from unittest.mock import patch
 from langchain_core.documents import Document
 from backend.evaluation import orchestration as multi
@@ -243,3 +245,194 @@ class MultiEvaluationTests(unittest.TestCase):
         self.assertEqual(mock.call_count, 1)
         self.assertEqual(len(snapshots), 1)
         self.assertEqual(snapshots[0]["model_evaluations"]["gpt"]["status"], "complete")
+
+    def unavailable(self, provider):
+        return (
+            EvaluationFailure("quota", "Provider quota is exhausted.")
+            if provider == "gemini"
+            else None
+        )
+
+    def test_unavailable_provider_is_skipped_reported_and_not_required(self):
+        snapshots, skipped = [], []
+
+        def evaluate(context, jobs, **kwargs):
+            kwargs["on_result"](self.assessment(kwargs["provider"]))
+
+        with patch.object(multi, "check_availability", side_effect=self.unavailable):
+            with patch.object(multi, "evaluate_provider", side_effect=evaluate) as mock:
+                results = multi.evaluate_jobs(
+                    "resume",
+                    [self.doc],
+                    include_all=True,
+                    on_result=snapshots.append,
+                    on_unavailable=lambda item, failure: skipped.append(item["value"]),
+                )
+        self.assertEqual(
+            {call.kwargs["provider"] for call in mock.call_args_list}, {"claude", "gpt"}
+        )
+        self.assertEqual(skipped, ["gemini"])
+        # The skipped row is kept so a retry can fill it, but it is not required.
+        self.assertEqual(results[0]["model_evaluations"]["gemini"]["status"], "skipped")
+        self.assertEqual(results[0]["fit_category"], "strong_match")
+        self.assertEqual(results[0]["score"], 85)
+        self.assertEqual(results[0]["evaluation_model_id"], "Claude + GPT")
+        self.assertIn("2/2 models complete", results[0]["assessment_summary"])
+
+    def test_retried_skipped_model_joins_the_verdict(self):
+        complete = {"status": "complete", "fit_category": "strong_match", "score": 90}
+        existing = multi.summarize(
+            {
+                "model_evaluations": {
+                    "claude": complete,
+                    "gpt": complete,
+                    "gemini": {"status": "skipped", "error": "Quota exhausted."},
+                }
+            }
+        )
+        self.assertEqual(existing["fit_category"], "strong_match")
+        incoming = {
+            "model_evaluations": {
+                "gemini": {"status": "complete", "fit_category": "review", "score": 60}
+            }
+        }
+        merged = multi.merge_result(existing, incoming)
+        self.assertEqual(merged["fit_category"], "review")
+        self.assertIn("3/3 models complete", merged["assessment_summary"])
+        # A later skip never replaces a completed assessment.
+        again = multi.merge_result(
+            merged, {"model_evaluations": {"gemini": {"status": "skipped"}}}
+        )
+        self.assertEqual(again["model_evaluations"]["gemini"]["status"], "complete")
+
+    def test_saved_three_model_job_still_needs_all_three(self):
+        job = {
+            "model_evaluations": {
+                "claude": {"status": "complete", "fit_category": "strong_match", "score": 90},
+                "gpt": {"status": "complete", "fit_category": "strong_match", "score": 90},
+                "gemini": {"status": "failed"},
+            }
+        }
+        result = multi.summarize(job)
+        self.assertEqual(result["fit_category"], "review")
+        self.assertIn("2/3 models complete", result["assessment_summary"])
+
+    def test_no_available_model_still_records_failures(self):
+        with patch.object(
+            multi,
+            "check_availability",
+            return_value=EvaluationFailure("quota", "Provider quota is exhausted."),
+        ):
+            with patch.object(multi, "evaluate_provider") as mock:
+                multi.evaluate_jobs("resume", [self.doc], include_all=True)
+        self.assertEqual(mock.call_count, 3)
+
+    def test_quota_failure_marks_provider_unavailable(self):
+        def evaluate(context, jobs, **kwargs):
+            kwargs["on_error"](jobs[0], EvaluationFailure("quota", "Quota exhausted."))
+
+        with patch.object(multi, "check_availability", return_value=None):
+            with patch.object(multi, "evaluate_provider", side_effect=evaluate):
+                with patch.object(multi, "mark_unavailable") as mark:
+                    multi.evaluate_jobs("resume", [self.doc], include_all=True)
+        self.assertEqual(
+            {call.args[0] for call in mark.call_args_list}, {"claude", "gpt", "gemini"}
+        )
+
+    def test_retry_checks_only_its_model_and_never_resends_while_unavailable(self):
+        retry = Document(
+            page_content=self.doc.page_content,
+            metadata={**self.doc.metadata, "_evaluation_provider": "gemini"},
+        )
+        skipped = []
+        with patch.object(
+            multi, "check_availability", side_effect=self.unavailable
+        ) as check:
+            with patch.object(multi, "evaluate_provider") as mock:
+                multi.evaluate_jobs(
+                    "resume",
+                    [retry],
+                    include_all=True,
+                    on_unavailable=lambda item, failure: skipped.append(item["value"]),
+                )
+        self.assertEqual([call.args[0] for call in check.call_args_list], ["gemini"])
+        mock.assert_not_called()
+        self.assertEqual(skipped, ["gemini"])
+        # Once the model works again, the same retry is sent.
+        with patch.object(multi, "check_availability", return_value=None):
+            with patch.object(multi, "evaluate_provider") as mock:
+                multi.evaluate_jobs("resume", [retry], include_all=True)
+        self.assertEqual(mock.call_args.kwargs["provider"], "gemini")
+
+    def test_slow_availability_check_does_not_hold_the_search(self):
+        release = threading.Event()
+        self.addCleanup(release.set)
+
+        def slow(provider):
+            if provider == "gpt":
+                release.wait(5)
+            return None
+
+        started = time.monotonic()
+        with patch.object(multi, "AVAILABILITY_CHECK_SECONDS", 0.1):
+            with patch.object(multi, "check_availability", side_effect=slow):
+                with patch.object(multi, "evaluate_provider") as mock:
+                    multi.evaluate_jobs("resume", [self.doc], include_all=True)
+        self.assertLess(time.monotonic() - started, 2)
+        self.assertEqual(mock.call_count, 3)
+
+
+class AvailabilityCheckTests(unittest.TestCase):
+    def setUp(self):
+        from backend.evaluation import providers
+
+        self.providers = providers
+        providers._AVAILABILITY.clear()
+        self.addCleanup(providers._AVAILABILITY.clear)
+        env = patch.dict(os.environ, {"CAREER_EVALUATION_PREFLIGHT": "true"})
+        env.start()
+        self.addCleanup(env.stop)
+
+    def test_spend_cap_is_unavailable_and_cached(self):
+        class Capped(Exception):
+            status_code = 429
+
+        llm = patch.object(self.providers, "create_evaluation_llm")
+        create = llm.start()
+        self.addCleanup(llm.stop)
+        create.return_value.invoke.side_effect = Capped(
+            "RESOURCE_EXHAUSTED: project exceeded its monthly spending cap"
+        )
+        first = self.providers.check_availability("gemini")
+        second = self.providers.check_availability("gemini")
+        self.assertEqual(first.category, "quota")
+        self.assertIs(second, first)
+        self.assertEqual(create.return_value.invoke.call_count, 1)
+
+    def test_timeout_does_not_skip_a_model(self):
+        with patch.object(self.providers, "create_evaluation_llm") as create:
+            create.return_value.invoke.side_effect = TimeoutError("timed out")
+            self.assertIsNone(self.providers.check_availability("claude"))
+
+    def test_concurrent_checks_send_one_request(self):
+        release = threading.Event()
+        with patch.object(self.providers, "create_evaluation_llm") as create:
+            create.return_value.invoke.side_effect = lambda prompt: release.wait(5)
+            self.providers.warm_availability()
+            waiter = threading.Thread(
+                target=self.providers.check_availability, args=("claude",)
+            )
+            waiter.start()
+            release.set()
+            waiter.join(5)
+            for thread in threading.enumerate():
+                if thread.name.startswith("availability-"):
+                    thread.join(5)
+        # Three warm-up requests, one per provider; the waiting caller reuses Claude's.
+        self.assertEqual(create.call_count, 3)
+
+    def test_check_can_be_turned_off(self):
+        with patch.dict(os.environ, {"CAREER_EVALUATION_PREFLIGHT": "false"}):
+            with patch.object(self.providers, "create_evaluation_llm") as create:
+                self.assertIsNone(self.providers.check_availability("gpt"))
+        create.assert_not_called()

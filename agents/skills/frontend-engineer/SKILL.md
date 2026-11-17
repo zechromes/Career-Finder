@@ -5,7 +5,7 @@ description: Implement Career Tracker Vue interfaces, Pinia state, routing, styl
 
 # Frontend engineer
 
-Read root `AGENTS.md` and `frontend/README.md`. Own assigned application files in
+Read root `AGENTS.md` and the Frontend section of `docs/DEVELOPMENT.md`. Own assigned application files in
 `frontend/src/`; agree on ownership before editing tests, mocks, or shared config.
 
 - Follow the existing Vue 3 Composition API, TypeScript, Pinia, Vue Router, and
@@ -25,7 +25,7 @@ Read root `AGENTS.md` and `frontend/README.md`. Own assigned application files i
   `frontend/src/types/api.d.ts` or invent response fields in production code.
 - Hand observable scenarios to the test engineer. For relevant changes, run
   frontend typecheck, focused tests, and build; use mocked browser workflows for
-  interaction changes. Commands are documented in `frontend/README.md`.
+  interaction changes. Commands are documented in `docs/DEVELOPMENT.md`.
 
 Report changed user behavior, files, contract dependencies, verification results,
 and unresolved UI limitations. Keep backend fixes with the backend owner unless

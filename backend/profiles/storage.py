@@ -87,6 +87,8 @@ def create_profile(body: SavedProfileInput):
             # Protect the source run while copying its PDF and linking the saved profile.
             # Run deletion using this lock must wait until that work has finished.
             with runs.RUNS_LOCK:
+                # Saving is the other point where an upload is written to disk.
+                runs.commit_upload(body.source_run_id)
                 source = runs.RUNS_DIR / body.source_run_id / "resume.pdf"
                 if not source.is_file():
                     raise HTTPException(

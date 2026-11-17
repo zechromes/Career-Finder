@@ -176,7 +176,7 @@ def collection_batch(board, number, offset=0, deferred=False):
     """Group a collection round using only public source labels and numeric counters."""
     board = (
         board
-        if board in {"linkedin", "indeed", "glassdoor", "seek", "adzuna"}
+        if board in {"linkedin", "indeed", "glassdoor", "seek", "adzuna", "google"}
         else "mixed"
     )
     name = f"jobs.{'deferred_batch' if deferred else 'batch'}.{board}"

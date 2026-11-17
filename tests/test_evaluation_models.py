@@ -108,9 +108,9 @@ class EvaluationModelTests(unittest.TestCase):
             self.assertNotIn("temperature", gemini.call_args.kwargs)
         with patch("langchain_anthropic.ChatAnthropic") as claude:
             create_evaluation_llm("claude")
-            self.assertEqual(claude.call_args.kwargs["default_request_timeout"], 90.0)
+            self.assertEqual(claude.call_args.kwargs["default_request_timeout"], 180.0)
             self.assertEqual(claude.call_args.kwargs["max_retries"], 1)
-            self.assertEqual(claude.call_args.kwargs["max_tokens"], 8192)
+            self.assertEqual(claude.call_args.kwargs["max_tokens"], 16000)
             self.assertNotIn("temperature", claude.call_args.kwargs)
 
     def test_gpt_client_and_configured_model_options(self):
@@ -179,7 +179,7 @@ class EvaluationModelTests(unittest.TestCase):
                     importance="must_have",
                     verdict="not_met",
                     job_quote="Requires 8 years.",
-                    resume_quote="2 years experience",
+                    resume_quotes=["2 years experience"],
                     explanation="Experience gap",
                 )
             ],
@@ -201,6 +201,28 @@ class EvaluationModelTests(unittest.TestCase):
                 "posted_at": "2026-09-15",
             },
         )
+        loader = lambda job: RequirementSet(
+            posting_hash="synthetic",
+            extraction_model="synthetic",
+            extraction_version="test",
+            requirements=[
+                {
+                    key: value
+                    for key, value in evaluation.requirement_verdicts[0]
+                    .model_dump()
+                    .items()
+                    if key
+                    in {
+                        "requirement_id",
+                        "requirement",
+                        "importance",
+                        "job_quote",
+                        "section",
+                        "type",
+                    }
+                }
+            ],
+        )
         for provider in ["gemini", "claude", "gpt"]:
             with (
                 self.subTest(provider=provider),
@@ -216,28 +238,7 @@ class EvaluationModelTests(unittest.TestCase):
                     include_all=True,
                     provider=provider,
                     on_result=saved.append,
-                    requirement_loader=lambda job: RequirementSet(
-                        posting_hash="synthetic",
-                        extraction_model="synthetic",
-                        extraction_version="test",
-                        requirements=[
-                            {
-                                key: value
-                                for key, value in evaluation.requirement_verdicts[0]
-                                .model_dump()
-                                .items()
-                                if key
-                                in {
-                                    "requirement_id",
-                                    "requirement",
-                                    "importance",
-                                    "job_quote",
-                                    "section",
-                                    "type",
-                                }
-                            }
-                        ],
-                    ),
+                    requirement_loader=loader,
                 )
                 factory.assert_called_once_with(provider)
                 if provider == "gpt":
@@ -252,8 +253,10 @@ class EvaluationModelTests(unittest.TestCase):
                 self.assertEqual(results[0]["fit_category"], "not_suitable")
                 self.assertFalse(results[0]["is_strong_fit"])
                 self.assertEqual(results[0]["apply_url"], "https://example.com/job")
+                self.assertEqual(results[0]["mismatch_reason"], "Experience gap")
+                self.assertEqual(results[0]["rubric_category"], "not_suitable")
                 self.assertEqual(
-                    results[0]["mismatch_reason"],
+                    results[0]["rubric_reason"],
                     "A mandatory requirement has an evidenced mismatch.",
                 )
                 self.assertEqual(results[0]["about_company"], "Builds software.")
@@ -262,6 +265,24 @@ class EvaluationModelTests(unittest.TestCase):
                 )
                 self.assertEqual(results[0]["salary"], "AUD 100,000–120,000 per year")
                 self.assertEqual(saved, results)
+        # The model's decision is used even when the code rubric would reject the job,
+        # and its stated reason for setting a rule aside is kept.
+        evaluation.fit_category = "strong_match"
+        evaluation.rule_exception = "Posting says: 'graduates welcome'."
+        with patch(
+            "backend.evaluation.providers.create_evaluation_llm", return_value=client
+        ):
+            result = evaluate_jobs(
+                "2 years experience",
+                [document],
+                include_all=True,
+                provider="claude",
+                requirement_loader=loader,
+            )[0]
+        self.assertEqual((result["fit_category"], result["score"]), ("strong_match", None))
+        self.assertEqual(result["rule_exception"], "Posting says: 'graduates welcome'.")
+        self.assertEqual(result["mismatch_reason"], "")
+        self.assertEqual(result["rubric_category"], "not_suitable")
 
     def test_legacy_entry_point_still_selects_claude(self):
         with patch(

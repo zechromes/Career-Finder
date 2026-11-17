@@ -46,7 +46,7 @@ class LinkedInCollectionTests(unittest.TestCase):
             setting.start()
             self.addCleanup(setting.stop)
 
-    def test_linkedin_shares_one_budget_with_descriptions_enabled(self):
+    def test_linkedin_shares_one_budget_without_jobspy_descriptions(self):
         with patch(
             "jobspy.scrape_jobs", side_effect=[_cards(range(4)), _cards(range(4, 20))]
         ) as scrape:
@@ -62,7 +62,7 @@ class LinkedInCollectionTests(unittest.TestCase):
             [c.kwargs["results_wanted"] for c in scrape.call_args_list], [6, 2]
         )
         self.assertTrue(
-            all(c.kwargs["fetch_description"] is True for c in scrape.call_args_list)
+            all(c.kwargs["fetch_description"] is False for c in scrape.call_args_list)
         )
         self.assertEqual(len(jobs), 2)
 
@@ -148,3 +148,118 @@ class ScreeningAndHydrationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LinkedInPacingTests(unittest.TestCase):
+    def test_job_page_requests_are_spaced_out(self):
+        from unittest.mock import MagicMock
+        from backend.search import linkedin_details
+
+        session = MagicMock()
+        session.get.return_value.status_code = 404
+        with patch.object(linkedin_details, "_last_request", [0.0]), patch.object(
+            linkedin_details.time, "monotonic", side_effect=[100.0, 100.0, 100.5, 102.0]
+        ), patch.object(linkedin_details.time, "sleep") as sleep:
+            linkedin_details.fetch_details("1", session)
+            linkedin_details.fetch_details("2", session)
+        # The second request waits out the rest of the 2-second interval.
+        self.assertEqual(sleep.call_args_list[1].args[0], 1.5)
+
+    def test_jobspy_is_not_asked_for_linkedin_descriptions(self):
+        import tempfile
+        from backend.search.collection import fetch_job_vacancies
+
+        calls = []
+
+        def scrape(**options):
+            import pandas as pd
+
+            calls.append((options["site_name"][0], options["fetch_description"]))
+            return pd.DataFrame()
+
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+            "os.environ",
+            {
+                "JOB_SEARCH_PROVIDER": "jobspy",
+                "JOB_COLLECTION_CACHE_TTL_SECONDS": "0",
+                "JOBSPY_DESCRIPTION_CACHE_DIR": directory,
+                "LINKEDIN_DESCRIPTION_CACHE_DIR": directory,
+            },
+        ), patch("jobspy.scrape_jobs", side_effect=scrape):
+            fetch_job_vacancies(
+                ["Engineer"], ["Sydney"], ["linkedin", "indeed"], adaptive=True, posted_days_old=0
+            )
+        self.assertIn(("linkedin", False), calls)
+        self.assertIn(("indeed", True), calls)
+
+
+class RepostDateTests(unittest.TestCase):
+    def test_job_page_repost_date_replaces_the_card_date(self):
+        from datetime import datetime, timedelta, timezone
+        from unittest.mock import MagicMock
+
+        session = MagicMock()
+        session.get.return_value.status_code = 200
+        session.get.return_value.url = "https://www.linkedin.com/jobs/view/1"
+        session.get.return_value.text = (
+            '<span class="posted-time-ago__text"> Reposted 6 days ago </span>'
+        )
+        with patch.object(linkedin_details.time, "sleep"):
+            details = linkedin_details.fetch_details("1", session)
+        # The app keeps dates in UTC, so compare with the UTC date, not the local one.
+        six_days_ago = (datetime.now(timezone.utc) - timedelta(days=6)).date().isoformat()
+        self.assertEqual(details["posted_at"], six_days_ago)
+
+        job = {"url": "https://www.linkedin.com/jobs/view/1", "posted_at": "2026-01-01"}
+        with tempfile.TemporaryDirectory() as directory:
+            linkedin_details.hydrate(
+                [job],
+                cache=linkedin_details.DescriptionCache(directory, ttl=3600),
+                fetch=lambda _: {"description": "Synthetic", "posted_at": six_days_ago},
+            )
+        self.assertEqual(job["posted_at"], six_days_ago)
+
+    def test_old_linkedin_card_is_kept_until_its_page_is_read(self):
+        from datetime import date, timedelta
+
+        old = _cards([1])
+        old["date_posted"] = "2020-01-01"
+        recent = (date.today() - timedelta(days=6)).isoformat()
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+            "os.environ",
+            {
+                "JOB_SEARCH_PROVIDER": "jobspy",
+                "JOB_COLLECTION_CACHE_TTL_SECONDS": "0",
+                "JOBSPY_DESCRIPTION_CACHE_DIR": directory,
+                "LINKEDIN_DESCRIPTION_CACHE_DIR": directory,
+            },
+        ), patch("jobspy.scrape_jobs", side_effect=[old] + [pd.DataFrame()] * 20), patch.object(
+            linkedin_details,
+            "fetch_details",
+            return_value={"description": "Synthetic", "posted_at": recent},
+        ):
+            jobs = fetch_job_vacancies(
+                ["Data Engineer"], ["Sydney"], ["linkedin"], adaptive=True, posted_days_old=7
+            )
+        self.assertEqual([job["posted_at"] for job in jobs], [recent])
+
+    def test_linkedin_job_whose_page_date_is_old_is_dropped(self):
+        old = _cards([1])
+        old["date_posted"] = "2020-01-01"
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+            "os.environ",
+            {
+                "JOB_SEARCH_PROVIDER": "jobspy",
+                "JOB_COLLECTION_CACHE_TTL_SECONDS": "0",
+                "JOBSPY_DESCRIPTION_CACHE_DIR": directory,
+                "LINKEDIN_DESCRIPTION_CACHE_DIR": directory,
+            },
+        ), patch("jobspy.scrape_jobs", side_effect=[old] + [pd.DataFrame()] * 20), patch.object(
+            linkedin_details,
+            "fetch_details",
+            return_value={"description": "Synthetic", "posted_at": "2020-01-01"},
+        ):
+            jobs = fetch_job_vacancies(
+                ["Data Engineer"], ["Sydney"], ["linkedin"], adaptive=True, posted_days_old=7
+            )
+        self.assertEqual(jobs, [])

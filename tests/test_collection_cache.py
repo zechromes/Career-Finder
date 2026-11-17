@@ -217,7 +217,7 @@ class ScraperWarningTests(unittest.TestCase):
             ("LinkedIn", "response status code 429 private-url"),
             ("LinkedIn", "response status code 429 private-url"),
             ("Indeed", "HTTP 403 private-token"),
-            ("Glassdoor", "parse failure with private-query and 429 rows"),
+            ("Seek", "parse failure with private-query and 429 rows"),
         ]:
             handler.handle(
                 logging.LogRecord(
@@ -230,7 +230,7 @@ class ScraperWarningTests(unittest.TestCase):
         self.assertTrue(any("Indeed blocked" in message for message in messages))
         self.assertTrue(
             any(
-                "Glassdoor reported a request failure" in message
+                "A job board reported a request failure" in message
                 for message in messages
             )
         )

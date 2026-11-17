@@ -56,15 +56,14 @@ class DescriptionCaptureTests(unittest.TestCase):
                 ["Engineer"], ["Sydney"], ["linkedin"], posted_days_old=0
             )
         supplied = scrape.call_args.kwargs
-        # Search cards are collected without per-job page requests; descriptions
-        # are hydrated afterwards for screened jobs and must still be preserved.
-        self.assertTrue(supplied["fetch_description"])
+        # JobSpy is not asked for LinkedIn descriptions (its burst of job-page
+        # requests triggers HTTP 429); returned text must still be preserved.
+        self.assertFalse(supplied["fetch_description"])
         self.assertEqual(supplied["description_format"], "markdown")
         self.assertEqual(jobs[0]["description"], "Python required.")
 
     def test_absent_description_cannot_produce_invented_analysis(self):
         evaluation = JobEvaluation(
-            score=95,
             fit_category="strong_match",
             experience_alignment="meets",
             about_company="Invented company facts",

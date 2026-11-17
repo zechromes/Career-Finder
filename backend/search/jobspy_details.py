@@ -3,8 +3,6 @@
 from backend.observability import stage
 import os
 import logging
-from urllib.parse import parse_qs, urlsplit
-from types import SimpleNamespace
 
 from backend.paths import JOB_DESCRIPTION_CACHE_DIR
 from backend.search import linkedin_details, board_cooldown
@@ -38,60 +36,6 @@ class DescriptionCache(linkedin_details.DescriptionCache):
         )
 
 
-class _CheckedSession:
-    """Surface statuses JobSpy's detail parser otherwise converts into empty text."""
-
-    def __init__(self, session):
-        self.session = session
-
-    def _request(self, method, *args, **kwargs):
-        kwargs.setdefault("timeout", 30)
-        response = getattr(self.session, method)(*args, **kwargs)
-        if response.status_code == 429:
-            raise linkedin_details.RateLimited()
-        response.raise_for_status()
-        return response
-
-    def get(self, *args, **kwargs):
-        return self._request("get", *args, **kwargs)
-
-    def post(self, *args, **kwargs):
-        return self._request("post", *args, **kwargs)
-
-
-class GlassdoorDetails:
-    """Reuse JobSpy's country/session setup and parser, without repeating searches."""
-
-    def __init__(self):
-        self.clients = {}
-
-    def __call__(self, job):
-        from jobspy.glassdoor import Glassdoor, headers
-        from jobspy.model import Country, DescriptionFormat
-        from jobspy.util import create_session
-
-        identifier = parse_qs(urlsplit(job.get("url", "")).query).get("jl", [""])[0]
-        if not identifier.isdigit():
-            return {}
-        country = job.get("collection_country", "australia")
-        if country not in self.clients:
-            client = Glassdoor()
-            client.base_url = Country.from_string(country).get_glassdoor_url()
-            session = create_session()
-            session.headers.update(headers)
-            client.session = _CheckedSession(session)
-            client.scraper_input = SimpleNamespace(
-                description_format=DescriptionFormat.MARKDOWN
-            )
-            # This establishes the cookies used by JobSpy's detail endpoint.
-            client._get_location(job.get("requested_location", ""), False)
-            self.clients[country] = client
-        return {
-            "description": self.clients[country]._fetch_job_description(int(identifier))
-            or ""
-        }
-
-
 @stage("jobs.descriptions")
 def hydrate(
     board,
@@ -117,13 +61,10 @@ def hydrate(
             fetch = lambda job: linkedin_details.fetch_details(
                 linkedin_details.job_id(job.get("url", ""))
             )
-        elif board == "glassdoor":
-            fetch = GlassdoorDetails()
     limited = not allow_network
     label = {
         "linkedin": "LinkedIn",
         "indeed": "Indeed",
-        "glassdoor": "Glassdoor",
         "seek": "SEEK",
     }[board]
     reported = set()
@@ -137,7 +78,6 @@ def hydrate(
                 name = {
                     "linkedin": "LinkedIn",
                     "indeed": "Indeed",
-                    "glassdoor": "Glassdoor",
                     "seek": "SEEK",
                 }[board]
                 logging.getLogger("JobSpy:" + name).error(message)
@@ -185,7 +125,9 @@ def hydrate(
                 limited = True
                 board_cooldown.mark_limited(board)
                 report(
-                    f"{label} rate-limited description requests (HTTP 429). Remaining detail requests were skipped; results may be incomplete."
+                    board_cooldown.RateLimitNotice(
+                        f"{label} rate-limited description requests (HTTP 429). Remaining detail requests were skipped; results may be incomplete."
+                    )
                 )
             except Exception:
                 report(
@@ -196,6 +138,8 @@ def hydrate(
         if details and details.get("description"):
             ready += 1
             job["description"] = details["description"]
+            if details.get("posted_at"):
+                job["posted_at"] = details["posted_at"]
             if details.get("fetched_at"):
                 job["collection_fetched_at"] = min(
                     job.get("collection_fetched_at", details["fetched_at"]),

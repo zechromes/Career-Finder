@@ -17,6 +17,8 @@ RUN_CONTEXTS = {}
 RUNS_LOCK = threading.RLock()
 ACTIVE_WORKERS = set()
 DELETING = set()
+# Uploads not yet searched or saved stay in memory only: run ID -> resume PDF bytes.
+UNSAVED = {}
 RATE_WINDOWS = defaultdict(deque)
 RETENTION_SECONDS = 7 * 24 * 3600
 
@@ -62,6 +64,8 @@ def run_worker(run_id, function, *args):
 
 # Increment the snapshot revision and replace its file atomically.
 def persist_run(run_id):
+    if run_id in UNSAVED:
+        return
     state = RUNS[run_id]
     state["revision"] = state.get("revision", 0) + 1
     temporary = run_state_path(run_id).with_suffix(".tmp")
@@ -104,6 +108,14 @@ def snapshot(run_id):
         data["runId"] = run_id
         data["phases"] = phases_for(data)
         data["worker_active"] = run_id in ACTIVE_WORKERS
+        # Rate limits are handled behind the scenes, including in older saved runs.
+        from backend.search.board_cooldown import saved_rate_limit
+
+        data["scrape_errors"] = [
+            message
+            for message in data.get("scrape_errors") or []
+            if not saved_rate_limit(message)
+        ]
         return RunSnapshot.model_validate(data).model_dump()
 
 
@@ -114,8 +126,11 @@ def remove_run(run_id):
     with RUNS_LOCK:
         RUNS.pop(run_id, None)
         RUN_CONTEXTS.pop(run_id, None)
+        unsaved = UNSAVED.pop(run_id, None) is not None
         if run_id in ACTIVE_WORKERS:
-            (RUNS_DIR / run_id / ".delete-requested").touch()
+            # An unsaved upload has no folder to mark; nothing reaches disk.
+            if not unsaved:
+                (RUNS_DIR / run_id / ".delete-requested").touch()
             DELETING.add(run_id)
         else:
             shutil.rmtree(RUNS_DIR / run_id, ignore_errors=True)
@@ -166,6 +181,27 @@ async def limits(request: Request, call_next):
 def run_state_path(run_id):
     """Return the durable status file for a pipeline run."""
     return RUNS_DIR / run_id / "state.json"
+
+
+def write_context(run_id, context):
+    """Store the evaluation context in memory, and on disk once the run is saved."""
+    RUN_CONTEXTS[run_id] = context
+    if run_id not in UNSAVED:
+        run_context_path(run_id).write_text(context, encoding="utf-8")
+
+
+def commit_upload(run_id):
+    """Write an in-memory upload to disk when it is first searched or saved."""
+    with RUNS_LOCK:
+        data = UNSAVED.pop(run_id, None)
+        if data is None:
+            return
+        (RUNS_DIR / run_id).mkdir(parents=True, exist_ok=True)
+        (RUNS_DIR / run_id / "resume.pdf").write_bytes(data)
+        if run_id in RUN_CONTEXTS:
+            write_context(run_id, RUN_CONTEXTS[run_id])
+        if run_id in RUNS:
+            persist_run(run_id)
 
 
 def run_context_path(run_id):

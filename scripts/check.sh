@@ -26,8 +26,9 @@ fi
 echo "Using Python: $PYTHON_BIN"
 # Validate shell syntax and backend behavior before generating public API contracts.
 bash -n run_app.sh scripts/check.sh
-# Keep local tracing credentials from exporting synthetic test runs.
-CAREER_LANGSMITH_TRACING=false "$PYTHON_BIN" -m unittest discover -s tests
+# Keep local tracing credentials from exporting synthetic test runs, and never
+# send the live model availability check or HyDE ad generation from tests.
+CAREER_LANGSMITH_TRACING=false CAREER_EVALUATION_PREFLIGHT=false QUERY_BUILDER=evidence "$PYTHON_BIN" -m unittest discover -s tests
 # Regenerate frontend types from the authoritative FastAPI schema.
 "$PYTHON_BIN" frontend/scripts/export_openapi.py
 cd frontend

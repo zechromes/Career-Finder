@@ -70,6 +70,13 @@ def retry_failed_evaluations(run_id):
         successes = []
         failures = []
         remaining = []
+        pending = list(entries)
+
+        # Each retried model assessment counts once, whether it succeeded or failed again.
+        def report_progress():
+            runs.update_run(
+                run_id, retry_done=min(len(entries), len(entries) - len(pending) + len(failures))
+            )
 
         # Persist retry progress without repeating providers that already succeeded.
         def save(result):
@@ -111,6 +118,8 @@ def retry_failed_evaluations(run_id):
                     + len(runs.RUNS[run_id].get("excluded_recommendations", [])),
                 )
                 (run_dir / "failed_jobs.json").write_text(json.dumps(pending_entries))
+                pending[:] = pending_entries
+                report_progress()
 
         # Record a failed assessment while retaining other providers’ completed work.
         def failure(job, error):
@@ -129,6 +138,21 @@ def retry_failed_evaluations(run_id):
                     "message": str(error),
                     "skipped": error.skipped,
                 }
+            )
+            report_progress()
+
+        # Ask each model again rather than trusting a cached answer, then leave
+        # jobs for a model that is still unavailable saved instead of re-sending them.
+        from backend.evaluation.providers import forget_availability
+
+        forget_availability(
+            {entry.get("metadata", {}).get("_evaluation_provider") for entry in entries}
+        )
+        unavailable = {}
+
+        def not_retried(option, failure):
+            unavailable[option["value"]] = (
+                f"{option['label']} was not retried: {failure} Its jobs stay saved; retry again once it is available."
             )
 
         groups = {}
@@ -157,7 +181,13 @@ def retry_failed_evaluations(run_id):
                 on_result=save,
                 on_error=failure,
                 should_cancel=lambda: runs.stopped(run_id),
+                on_unavailable=not_retried,
             )
+        remaining.extend(
+            entry
+            for entry in entries
+            if entry.get("metadata", {}).get("_evaluation_provider") in unavailable
+        )
         # Save remaining failures, refresh the export, and finalize retry status together.
         # Check cancellation before writing the final state.
         with runs.RUNS_LOCK:
@@ -169,12 +199,21 @@ def retry_failed_evaluations(run_id):
                 run_id,
                 status="complete",
                 evaluation_errors=failures,
+                # Models still unavailable are reported here; the rest completed
+                # or now report a real failure.
+                skipped_models=list(unavailable.values()),
                 evaluation_failed=len(failures),
+                retry_total=0,
+                retry_done=0,
                 displayed_jobs=len(recommendations),
                 excluded_jobs=len(
                     runs.RUNS[run_id].get("excluded_recommendations", [])
                 ),
-                message="Evaluation retry finished.",
+                message=(
+                    "Evaluation retry finished; some models are still unavailable."
+                    if unavailable
+                    else "Evaluation retry finished."
+                ),
                 error=None,
             )
     except runs.RunStopped:
@@ -183,7 +222,9 @@ def retry_failed_evaluations(run_id):
     except Exception as exc:
         mark("failed")
         if not runs.stopped(run_id):
-            runs.update_run(run_id, status="error", error=str(exc))
+            runs.update_run(
+                run_id, status="error", error=str(exc), retry_total=0, retry_done=0
+            )
 
 
 # Admit a targeted retry only when the run has no competing worker.
@@ -205,6 +246,8 @@ async def retry_search_evaluations(run_id: str):
             phase=4,
             error=None,
             message="Retrying failed evaluations only",
+            retry_total=len(json.loads(path.read_text())),
+            retry_done=0,
         )
         runs.persist_run(run_id)
         runs.ACTIVE_WORKERS.add(run_id)

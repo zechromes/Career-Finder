@@ -19,6 +19,15 @@ from backend.search.preferences import (
 )
 
 
+def setUpModule():
+    # Saving an action also updates its labeled dataset; keep that out of data/.
+    datasets = tempfile.TemporaryDirectory()
+    unittest.addModuleCleanup(datasets.cleanup)
+    patcher = patch("backend.evaluation.action_dataset.REVIEW_DATASETS_DIR", Path(datasets.name))
+    patcher.start()
+    unittest.addModuleCleanup(patcher.stop)
+
+
 class PreferenceTests(unittest.TestCase):
     def doc(self, title="Developer", location="Sydney", text=""):
         return Document(

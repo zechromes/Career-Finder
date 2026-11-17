@@ -15,6 +15,15 @@ from backend.evaluation.runtime import EvaluationFailure
 from backend.search.ranking import retrieval_query_weights, reciprocal_rank_fusion
 
 
+def setUpModule():
+    # Saving an action also updates its labeled dataset; keep that out of data/.
+    datasets = tempfile.TemporaryDirectory()
+    unittest.addModuleCleanup(datasets.cleanup)
+    patcher = patch("backend.evaluation.action_dataset.REVIEW_DATASETS_DIR", Path(datasets.name))
+    patcher.start()
+    unittest.addModuleCleanup(patcher.stop)
+
+
 class ReviewTests(unittest.TestCase):
     def profile(self):
         return ResumeProfile(
@@ -28,8 +37,14 @@ class ReviewTests(unittest.TestCase):
                 "document_type": "resume",
                 "profile": self.profile().model_dump(),
             }
+            # The original text is attached by the app, never requested from the model.
             self.assertEqual(
-                classify_and_extract_resume("Synthetic CV"), self.profile()
+                classify_and_extract_resume("Synthetic CV"),
+                self.profile().model_copy(update={"source_text": "Synthetic CV"}),
+            )
+            schema = client.return_value.with_structured_output.call_args.args[0]
+            self.assertNotIn(
+                "source_text", schema.model_json_schema()["$defs"]["ExtractedProfile"]["properties"]
             )
             invoke.assert_called_once()
             self.assertEqual(invoke.call_args.args[0][-1], ("human", "Synthetic CV"))
@@ -365,3 +380,16 @@ class ReviewTests(unittest.TestCase):
             ):
                 evaluate()
             self.assertEqual(operation.call_count, 5)
+
+
+class ResumeReaderModelTests(unittest.TestCase):
+    def test_reasoning_models_get_effort_and_older_models_keep_temperature(self):
+        from backend.profiles import extraction
+
+        with patch("langchain_openai.ChatOpenAI") as client:
+            extraction.profile_llm("gpt-6.1-sol")
+            self.assertEqual(client.call_args.kwargs["reasoning_effort"], "low")
+            self.assertNotIn("temperature", client.call_args.kwargs)
+            extraction.profile_llm("gpt-4o-mini")
+            self.assertEqual(client.call_args.kwargs["temperature"], 0)
+            self.assertNotIn("reasoning_effort", client.call_args.kwargs)

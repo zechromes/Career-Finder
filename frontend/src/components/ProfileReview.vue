@@ -1,8 +1,9 @@
 <!-- Validate the editable profile or search-only preferences before emitting confirmation. -->
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useProfileStore } from '../stores/profile'
 import type { ModelOption } from '../types/domain'
+import type { components } from '../types/api'
 import LocationInput from './LocationInput.vue'
 import ChipInput from './ChipInput.vue'
 import ProfileTimeline from './ProfileTimeline.vue'
@@ -11,10 +12,49 @@ const props = defineProps<{
   disabled?: boolean
   saveOnly?: boolean
   searchOnly?: boolean
+  previousSearches?: components['schemas']['SearchRecord'][]
 }>()
 const emit = defineEmits<{ confirm: [] }>()
 const store = useProfileStore()
 const validation = ref('')
+// Resume headings the extractor listed but did not fill, outside the core fields.
+const core =
+  /experience|employment|work|career|education|qualification|skill|summary|profile|about|objective|contact|personal details|references/i
+const emptyHeadings = computed(() => {
+  const filled = new Set(
+    (store.draft.sections || [])
+      .filter((section) => section.entries?.some((entry) => entry.trim()))
+      .map((section) => section.heading.trim().toLowerCase()),
+  )
+  return (store.draft.section_headings || []).filter(
+    (heading) => !filled.has(heading.trim().toLowerCase()) && !core.test(heading),
+  )
+})
+function addSection() {
+  store.draft.sections = [...(store.draft.sections || []), { heading: '', entries: [] }]
+}
+function removeSection(index: number) {
+  store.draft.sections = (store.draft.sections || []).filter((_, position) => position !== index)
+}
+// Name what Find more adds over earlier searches, or note a recent identical search.
+const searchNote = computed(() => {
+  const previous = props.previousSearches || []
+  if (!props.searchOnly || !previous.length) return ''
+  const unseen = (chosen: string[] | undefined, key: 'platforms' | 'queries' | 'locations') => {
+    const known = new Set(previous.flatMap((search) => search[key] || []).map((v) => v.trim().toLowerCase()))
+    return (chosen || []).filter((value) => value.trim() && !known.has(value.trim().toLowerCase()))
+  }
+  const added = [
+    ...unseen(store.preferences.platforms, 'platforms').map((board) => board[0].toUpperCase() + board.slice(1)),
+    ...unseen(store.preferences.queries, 'queries'),
+    ...unseen(store.preferences.locations, 'locations'),
+  ]
+  if (added.length) return `New this time: ${added.join(', ')}.`
+  const minutes = Math.floor((Date.now() - Date.parse(previous[previous.length - 1].at)) / 60000)
+  if (!(minutes < 60)) return ''
+  const ago = minutes < 1 ? 'less than a minute ago' : `${minutes} minute${minutes === 1 ? '' : 's'} ago`
+  return `You searched these boards, roles and locations ${ago}; results may mostly repeat.`
+})
 // Validate required search choices before emitting the confirmed draft.
 function confirm() {
   validation.value = ''
@@ -113,14 +153,66 @@ function confirm() {
             placeholder="Qualification, institution and dates"
           />
         </div>
+        <section aria-labelledby="resume-sections-title" class="space-y-4">
+          <h3 id="resume-sections-title" class="font-semibold">Other resume sections</h3>
+          <p
+            v-if="emptyHeadings.length"
+            role="status"
+            class="rounded-xl bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-300"
+          >
+            Your resume has {{ emptyHeadings.length === 1 ? 'a section' : 'sections' }} that came
+            back empty: {{ emptyHeadings.join(', ') }}. Add their entries below so they count as
+            evidence.
+          </p>
+          <div class="grid items-start gap-6 lg:grid-cols-2">
+            <div
+              v-for="(section, index) in store.draft.sections"
+              :key="index"
+              class="space-y-2 rounded-xl border border-slate-200 p-3 dark:border-slate-700"
+            >
+              <div class="flex items-end gap-2">
+                <label class="flex-1"
+                  ><span class="field-label">Section heading</span
+                  ><input
+                    v-model="section.heading"
+                    class="field"
+                    placeholder="For example Projects or Certifications"
+                /></label>
+                <button
+                  type="button"
+                  class="btn-secondary"
+                  :aria-label="`Remove section ${section.heading || index + 1}`"
+                  @click="removeSection(index)"
+                >
+                  Remove
+                </button>
+              </div>
+              <ProfileTimeline
+                v-model="section.entries"
+                :label="section.heading || 'Untitled section'"
+                entry-label="Entry"
+                placeholder="Title, context, dates, tools and outcomes"
+              />
+            </div>
+          </div>
+          <button type="button" class="btn-secondary" @click="addSection">Add section</button>
+        </section>
       </template>
       <h2 class="border-t pt-5 text-lg font-semibold">Search preferences</h2>
       <div class="grid gap-5 sm:grid-cols-2">
-        <ChipInput
-          v-model="store.preferences.queries"
-          label="Target roles"
-          placeholder="Add a role"
-        />
+        <div>
+          <ChipInput
+            v-model="store.preferences.queries"
+            label="Target roles"
+            placeholder="Add a role"
+          />
+          <p
+            v-if="store.draft.target_roles_reason && !searchOnly"
+            class="mt-1 text-xs text-slate-600 dark:text-slate-300"
+          >
+            Suggested from your resume: {{ store.draft.target_roles_reason }}
+          </p>
+        </div>
         <div><LocationInput v-model="store.preferences.locations" /></div>
         <label
           ><span class="field-label">Work arrangement</span
@@ -157,6 +249,7 @@ function confirm() {
         <label
           ><span class="field-label">Semantic shortlist size</span
           ><select v-model="store.preferences.top_k" class="field">
+            <option :value="-1">Automatic (all up to 200 jobs, else top 100)</option>
             <option :value="15">Top 15 matches</option>
             <option :value="50">Top 50 matches</option>
             <option :value="100">Top 100 matches</option>
@@ -167,7 +260,7 @@ function confirm() {
         <fieldset>
           <legend class="field-label">Job boards</legend>
           <label
-            v-for="board in ['linkedin', 'indeed', 'glassdoor', 'seek']"
+            v-for="board in ['linkedin', 'indeed', 'seek', 'google', 'adzuna']"
             :key="board"
             class="mr-4 inline-flex gap-2 text-sm capitalize"
             ><input v-model="store.preferences.platforms" type="checkbox" :value="board" />{{
@@ -175,9 +268,15 @@ function confirm() {
             }}</label
           >
         </fieldset>
+        <p v-if="searchNote" role="status" class="sm:col-span-2 text-sm text-slate-700 dark:text-slate-200">
+          {{ searchNote }}
+        </p>
         <div class="sm:col-span-2 rounded-xl bg-indigo-50 p-4 dark:bg-indigo-950">
           <p class="field-label">Automatic model comparison</p>
-          <p class="text-sm">Every shortlisted job is evaluated by Claude, GPT and Gemini.</p>
+          <p class="text-sm">
+            Every shortlisted job is evaluated by each available model. A model out of quota or
+            credit is skipped and reported on the results page.
+          </p>
           <p
             v-for="model in props.models"
             :key="model.value"
@@ -189,7 +288,7 @@ function confirm() {
       </div>
       <p class="text-xs text-slate-600 dark:text-slate-300">
         Specific work arrangements require evidence in the posting; unknown arrangements are
-        omitted. All three evaluation providers run automatically, independently of the profile
+        omitted. Available evaluation providers run automatically, independently of the profile
         model.
       </p>
       <p v-if="validation" role="alert" class="text-sm text-rose-700 dark:text-rose-300">

@@ -49,15 +49,18 @@ onBeforeUnmount(() => {
 </script>
 <!-- Render the accessible interface from the state and handlers above. -->
 <template>
-  <ChipInput
-    v-model="locations"
-    label="Locations"
-    placeholder="City or country (optional)"
-    autocomplete
-    :suggestions="suggestions"
-    @suggest="suggest"
-  />
-  <p role="status" class="mt-1 text-xs text-slate-600 dark:text-slate-300">
-    {{ loading ? 'Finding locations…' : message || 'Leave empty to search worldwide.' }}
-  </p>
+  <!-- One root keeps the hint under the input in any grid or flex layout. -->
+  <div>
+    <ChipInput
+      v-model="locations"
+      label="Locations"
+      placeholder="City or country (optional)"
+      autocomplete
+      :suggestions="suggestions"
+      @suggest="suggest"
+    />
+    <p role="status" class="mt-1 text-xs text-slate-600 dark:text-slate-300">
+      {{ loading ? 'Finding locations…' : message || 'Leave empty to search worldwide.' }}
+    </p>
+  </div>
 </template>

@@ -36,6 +36,8 @@ def classify_failure(exc):
                 "daily quota",
                 "limit: 0",
                 "insufficient_quota",
+                "spending cap",
+                "spend cap",
             ]
         ):
             return EvaluationFailure(

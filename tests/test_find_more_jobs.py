@@ -2,7 +2,7 @@
 
 from backend.search import service as search_service
 from backend.search import retrieval
-from backend.search import collection
+from backend.search import board_cooldown, collection
 from backend import runs
 from backend.profiles import storage
 from backend.profiles import service as profiles_service
@@ -108,6 +108,7 @@ class FindMoreJobsTests(unittest.TestCase):
             ("RUN_CONTEXTS", {"test": "Synthetic candidate"}),
             ("ACTIVE_WORKERS", set()),
             ("DELETING", set()),
+            ("UNSAVED", {}),
         ]:
             p = patch.object(runs, name, value)
             p.start()
@@ -180,6 +181,11 @@ class FindMoreJobsTests(unittest.TestCase):
         )
         self.assertEqual(runs.RUNS["test"]["last_search_added"], 1)
         self.assertEqual(runs.RUNS["test"]["evaluated_jobs"], 2)
+        # The old posting is reported as skipped, and the search's scope is recorded.
+        self.assertIn("1 already in your results were skipped", runs.RUNS["test"]["message"])
+        self.assertEqual(
+            runs.RUNS["test"]["searches"][-1]["queries"], list(self.options["queries"])
+        )
         self.assertTrue((self.path / "relevant_jobs.xlsx").is_file())
 
     def test_repeat_worker_preserves_results_when_old_caller_omits_append_flag(self):
@@ -256,6 +262,63 @@ class FindMoreJobsTests(unittest.TestCase):
             evaluation_service.retry_failed_evaluations("test")
         self.assertEqual(calls, [["Developer"], ["Analyst"]])
 
+    def test_retry_reports_its_own_progress_and_clears_it_when_done(self):
+        from backend.evaluation.runtime import EvaluationFailure
+
+        entries = [
+            {"page_content": "Python required", "metadata": {**self.posting(), "_evaluation_provider": name}}
+            for name in ("claude", "gpt")
+        ]
+        (self.path / "failed_jobs.json").write_text(json.dumps(entries))
+        runs.RUNS["test"].update(status="running", retry_total=2, retry_done=0)
+        seen = []
+
+        def fail_each(context, jobs, **kw):
+            for entry in entries:
+                kw["on_error"](
+                    Document(page_content=entry["page_content"], metadata=entry["metadata"]),
+                    EvaluationFailure("rate_limit", "Synthetic rate limit"),
+                )
+                seen.append(runs.RUNS["test"]["retry_done"])
+
+        with patch.object(orchestration, "evaluate_jobs", side_effect=fail_each):
+            evaluation_service.retry_failed_evaluations("test")
+        # Failing again still counts as done for the retry's progress bar.
+        self.assertEqual(seen, [1, 2])
+        self.assertEqual((runs.RUNS["test"]["retry_total"], runs.RUNS["test"]["retry_done"]), (0, 0))
+
+    def test_retry_keeps_jobs_for_a_model_that_is_still_unavailable(self):
+        from backend.evaluation import providers
+        from backend.evaluation.runtime import EvaluationFailure
+
+        entry = {
+            "page_content": "Python required",
+            "metadata": {**self.posting(), "_evaluation_provider": "gemini"},
+        }
+        (self.path / "failed_jobs.json").write_text(json.dumps([entry]))
+        runs.RUNS["test"]["status"] = "running"
+        # A stale cached answer is dropped, so the check asks the model again.
+        providers.mark_unavailable("gemini", EvaluationFailure("quota", "Old answer."))
+        self.addCleanup(providers._AVAILABILITY.clear)
+        asked = []
+
+        def still_exhausted(provider):
+            asked.append(provider not in providers._AVAILABILITY)
+            return EvaluationFailure("quota", "Provider quota is exhausted.")
+
+        with patch.object(
+            orchestration, "check_availability", side_effect=still_exhausted
+        ), patch.object(orchestration, "evaluate_provider") as provider:
+            evaluation_service.retry_failed_evaluations("test")
+        self.assertEqual(asked, [True])
+        provider.assert_not_called()
+        self.assertEqual(
+            json.loads((self.path / "failed_jobs.json").read_text()), [entry]
+        )
+        self.assertEqual(len(runs.RUNS["test"]["skipped_models"]), 1)
+        self.assertIn("was not retried", runs.RUNS["test"]["skipped_models"][0])
+        self.assertEqual(runs.RUNS["test"]["evaluation_errors"], [])
+
     def test_cancel_before_publication_does_not_reserve_unshown_jobs(self):
         def cancel(context, jobs, **kw):
             runs.RUNS["test"]["status"] = "cancelled"
@@ -265,6 +328,35 @@ class FindMoreJobsTests(unittest.TestCase):
         # Check the expected behavior: cancel before publication does not reserve unshown jobs.
         self.assertEqual(runs.RUNS["test"]["recommendations"], [self.old])
         self.assertFalse((self.path / "shortlisted_jobs.json").exists())
+
+    def test_skipped_model_is_saved_for_retry(self):
+        from backend.evaluation import orchestration
+        from backend.evaluation.runtime import EvaluationFailure
+
+        def complete(context, jobs, **kw):
+            kw["on_result"](
+                {
+                    "apply_url": jobs[0].metadata["url"],
+                    "score": 90,
+                    "fit_category": "strong_match",
+                    "requirement_verdicts": [],
+                }
+            )
+
+        quota = EvaluationFailure("quota", "Provider quota is exhausted.")
+        with patch.object(
+            orchestration,
+            "check_availability",
+            side_effect=lambda provider: quota if provider == "gemini" else None,
+        ), patch.object(orchestration, "evaluate_provider", side_effect=complete):
+            self.run_search([self.posting()], orchestration.evaluate_jobs)
+        checkpoints = json.loads((self.path / "failed_jobs.json").read_text())
+        self.assertEqual(
+            [entry["metadata"]["_evaluation_provider"] for entry in checkpoints],
+            ["gemini"],
+        )
+        self.assertEqual(len(runs.RUNS["test"]["skipped_models"]), 1)
+        self.assertEqual(runs.RUNS["test"]["evaluation_errors"], [])
 
     def test_cancel_after_publication_preserves_pending_retry_and_restart_dedup(self):
         from backend.evaluation import orchestration
@@ -321,7 +413,8 @@ class FindMoreJobsTests(unittest.TestCase):
     def test_retry_scraping_starts_immediately_after_rate_limit(self):
         thread = MagicMock()
         runs.RUNS["test"].update(
-            scrape_errors=["LinkedIn rate-limited description requests (HTTP 429)."]
+            # A visible failure; rate limits themselves are no longer shown.
+            scrape_errors=["LinkedIn reported a request failure."]
         )
         before = copy.deepcopy(runs.RUNS["test"])
         with patch.object(runs, "threading", SimpleNamespace(Thread=thread)), patch(
@@ -334,6 +427,78 @@ class FindMoreJobsTests(unittest.TestCase):
             runs.RUNS["test"]["recommendations"], before["recommendations"]
         )
         self.assertEqual(runs.RUNS["test"]["scrape_errors"], [])
+
+    def test_rate_limit_is_handled_quietly(self):
+        message = board_cooldown.RateLimitNotice(
+            "LinkedIn rate-limited the request (HTTP 429)."
+        )
+        doc = Document(page_content="Python required", metadata=self.posting())
+
+        def collect(*args, **kwargs):
+            kwargs["on_error"](message)
+            return [self.posting()]
+
+        def successful(context, jobs, **kw):
+            result = {**self.old, "jobId": "stable-new", "apply_url": doc.metadata["url"]}
+            kw["on_result"](result)
+            return [result]
+
+        with patch.object(collection, "fetch_job_vacancies", side_effect=collect), patch.object(
+            collection, "vectorize_jobs_to_db"
+        ), patch.object(retrieval, "retrieve_relevant_jobs", return_value=[doc]), patch.object(
+            orchestration, "evaluate_jobs", side_effect=successful
+        ), self.assertLogs("backend.search.service", "WARNING"):
+            search_service.execute_job_search("test", None, self.options)
+        self.assertEqual(runs.RUNS["test"]["scrape_errors"], [])
+        self.assertEqual(runs.RUNS["test"]["status"], "complete")
+        self.assertEqual(len(runs.RUNS["test"]["busy_boards"]), 1)
+        self.assertTrue(runs.RUNS["test"]["busy_boards"][0].startswith("LinkedIn limited"))
+
+    def test_rate_limit_with_no_jobs_says_boards_are_busy(self):
+        def collect(*args, **kwargs):
+            kwargs["on_error"](
+                board_cooldown.RateLimitNotice(
+                    "LinkedIn rate-limited the request (HTTP 429)."
+                )
+            )
+            return []
+
+        self.options["append"] = False
+        with patch.object(collection, "fetch_job_vacancies", side_effect=collect):
+            search_service.execute_job_search("test", None, self.options)
+        self.assertEqual(
+            runs.RUNS["test"]["scrape_errors"],
+            ["Job boards are busy right now. Try again in a few minutes."],
+        )
+
+    def test_saved_rate_limit_messages_are_hidden(self):
+        runs.RUNS["test"].update(
+            scrape_errors=[
+                "LinkedIn rate-limited the request (HTTP 429). Wait before searching.",
+                "SEEK description request failed.",
+                "Indeed description request failed for job 84291.",
+            ]
+        )
+        self.assertEqual(
+            runs.snapshot("test")["scrape_errors"],
+            [
+                "SEEK description request failed.",
+                "Indeed description request failed for job 84291.",
+            ],
+        )
+
+    def test_plain_error_mentioning_429_stays_visible(self):
+        message = "Indeed description request failed for job 84291."
+
+        def collect(*args, **kwargs):
+            kwargs["on_error"](message)
+            return []
+
+        self.options["append"] = False
+        with patch.object(collection, "fetch_job_vacancies", side_effect=collect):
+            search_service.execute_job_search("test", None, self.options)
+        self.assertEqual(runs.RUNS["test"]["scrape_errors"], [message])
+        self.assertEqual(runs.RUNS["test"]["busy_boards"], [])
 
     def test_endpoint_reuses_profile_and_rejects_overlapping_work(self):
         thread = MagicMock()
@@ -471,6 +636,32 @@ class FindMoreJobsTests(unittest.TestCase):
                 self.assertTrue(thread.call_args.kwargs["args"][-1]["append"])
                 self.assertEqual(thread.call_args.kwargs["args"][-1]["top_k"], 15)
                 self.assertEqual(runs.RUNS["test"]["recommendations"], [self.old])
+
+    def test_first_search_writes_an_in_memory_upload_to_disk(self):
+        runs.RUNS["fresh"] = {
+            **copy.deepcopy(runs.RUNS["test"]),
+            "id": "fresh",
+            "status": "awaiting_search",
+            "recommendations": [],
+            "excluded_recommendations": [],
+        }
+        runs.UNSAVED["fresh"] = b"%PDF-1.4 synthetic"
+        runs.write_context("fresh", "Synthetic candidate")
+        folder = runs.RUNS_DIR / "fresh"
+        self.assertFalse(folder.exists())
+        with patch.object(runs, "threading", SimpleNamespace(Thread=MagicMock())):
+            response = self.client.put(
+                "/api/searches/fresh/confirm-profile",
+                json={
+                    "profile": runs.RUNS["fresh"]["profile"],
+                    "preferences": {"queries": ["Analyst"]},
+                },
+            )
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual((folder / "resume.pdf").read_bytes(), b"%PDF-1.4 synthetic")
+        self.assertTrue(runs.run_state_path("fresh").is_file())
+        self.assertTrue(runs.run_context_path("fresh").is_file())
+        self.assertNotIn("fresh", runs.UNSAVED)
 
     def test_repeat_confirm_profile_rejects_changed_profile_without_touching_results(
         self,

@@ -19,6 +19,21 @@ async function confirm(page: Page) {
   await locations.press('Enter')
   await page.getByRole('button', { name: 'Confirm and find jobs' }).click()
 }
+test('the profile shows every resume section, flags empty ones and explains target roles', async ({
+  page,
+}) => {
+  await upload(page)
+  await expect(page.getByRole('textbox', { name: 'Section heading' })).toHaveValue('Projects')
+  await expect(page.getByText('came back empty: Certifications')).toBeVisible()
+  await expect(page.getByText(/Suggested from your resume: Two years of Python/)).toBeVisible()
+  await page.getByRole('button', { name: 'Add section' }).click()
+  await page.getByRole('textbox', { name: 'Section heading' }).last().fill('Certifications')
+  await expect(page.getByRole('textbox', { name: 'Section heading' })).toHaveCount(2)
+  await page.getByRole('button', { name: 'Remove section Certifications' }).click()
+  await expect(page.getByRole('textbox', { name: 'Section heading' })).toHaveCount(1)
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
+})
+
 test('upload, edit, evaluate, filter, actions, route and accessibility', async ({ page }) => {
   await upload(page)
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
@@ -76,6 +91,8 @@ test('job sources only offer supported general boards', async ({ page }) => {
   await expect(page.getByRole('checkbox', { name: 'lever', exact: true })).toHaveCount(0)
   await expect(page.getByRole('checkbox', { name: 'linkedin', exact: true })).toBeVisible()
   await expect(page.getByRole('checkbox', { name: 'seek', exact: true })).toBeVisible()
+  await expect(page.getByRole('checkbox', { name: 'google', exact: true })).not.toBeChecked()
+  await expect(page.getByRole('checkbox', { name: 'adzuna', exact: true })).not.toBeChecked()
   await confirm(page)
   await expect(page.getByRole('heading', { name: 'Python Developer', exact: true })).toBeVisible()
 })
@@ -133,6 +150,30 @@ for (const scenario of ['zero', 'scrape-failure'])
       await expect(page.getByRole('heading', { name: 'No jobs found' })).toBeVisible()
     else await expect(page.getByRole('heading', { name: 'Search needs attention' })).toBeVisible()
   })
+
+test('a model skipped as unavailable is reported with the results', async ({ page }) => {
+  await upload(page, '?scenario=model-skipped')
+  await page.evaluate(() => sessionStorage.setItem('mock-scenario', 'model-skipped'))
+  await confirm(page)
+  // Warnings start collapsed in one panel so the job list stays near the top.
+  const notices = page.getByText('1 search notice', { exact: true })
+  await expect(notices).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Some models were skipped' })).toBeHidden()
+  await notices.click()
+  await expect(page.getByRole('heading', { name: 'Some models were skipped' })).toBeVisible()
+  await expect(page.getByText('Google Gemini · gemini-4-argon was skipped')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Retry skipped models' })).toBeEnabled()
+})
+
+test('a rate-limited board gets a calm note, not an error', async ({ page }) => {
+  await upload(page, '?scenario=board-busy')
+  await page.evaluate(() => sessionStorage.setItem('mock-scenario', 'board-busy'))
+  await confirm(page)
+  await page.getByText('1 search notice', { exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Fewer jobs from some boards' })).toBeVisible()
+  await expect(page.getByText('Nothing needs to change on your side.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Retry scraping' })).toBeHidden()
+})
 
 test('polling fallback produces results when event streaming fails', async ({ page }) => {
   await page.goto('/')
@@ -304,7 +345,7 @@ test('automatic evaluations show model comparison with readable evidence on mobi
   await upload(page)
   await expect(page.getByRole('combobox', { name: 'Evaluation model', exact: true })).toHaveCount(0)
   await expect(
-    page.getByText('Every shortlisted job is evaluated by Claude, GPT and Gemini.'),
+    page.getByText('Every shortlisted job is evaluated by each available model.', { exact: false }),
   ).toBeVisible()
   await confirm(page)
   await expect(page.getByRole('heading', { name: 'Your job matches' })).toBeVisible()
@@ -703,7 +744,7 @@ for (const view of ['Grid', 'Table'] as const) {
   })
 }
 
-test('dismissal feedback is optional, persistent and reversible', async ({ page }) => {
+test('dismissal feedback is optional, hidden from results and reversible', async ({ page }) => {
   await upload(page)
   await confirm(page)
   await page
@@ -730,15 +771,9 @@ test('dismissal feedback is optional, persistent and reversible', async ({ page 
   await dialog.getByLabel('Reason (optional)').selectOption('location')
   await dialog.getByRole('button', { name: 'Dismiss job', exact: true }).click()
   await expect(page.locator('article.job-card')).toHaveCount(0)
-  await page.getByText('Dismissal preferences (1)', { exact: true }).click()
-  await expect(
-    page.getByRole('button', { name: 'Remove preference for Python Developer' }),
-  ).toBeVisible()
+  // Reasons are kept for future searches but not listed on the results page.
+  await expect(page.getByText(/Dismissal preferences/)).toHaveCount(0)
   await page.reload()
-  await expect(page.getByText('Dismissal preferences (1)', { exact: true })).toBeVisible()
-  await page.getByText('Dismissal preferences (1)', { exact: true }).click()
-  await page.getByRole('button', { name: 'Remove preference for Python Developer' }).click()
-  await expect(page.getByText('Dismissal preferences (1)', { exact: true })).not.toBeVisible()
   await expect(page.locator('article.job-card')).toHaveCount(0)
   await page.getByRole('combobox', { name: 'Job actions', exact: true }).selectOption('dismissed')
   await page

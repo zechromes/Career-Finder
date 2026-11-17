@@ -5,18 +5,14 @@ import { RouterLink } from 'vue-router'
 import { jobKey } from '../stores/jobs'
 import { computed, useId } from 'vue'
 import { groupRequirements } from '../utils/requirementGroups'
+import { fitChipClass, fitLabel } from '../utils/fitCategory'
 import type { Job } from '../types/domain'
 import JobActions from './JobActions.vue'
 import CompanyLogo from './CompanyLogo.vue'
 const props = defineProps<{ job: Job; runId?: string; expanded?: boolean }>()
 const titleId = useId()
 const requirementGroups = computed(() => groupRequirements(props.job.candidate_requirements || []))
-const verdict = computed(
-  () =>
-    ({ strong_match: 'Strong match', review: 'For review', not_suitable: 'Not recommended' })[
-      props.job.fit_category || 'review'
-    ],
-)
+const verdict = computed(() => fitLabel(props.job.fit_category))
 // Only HTTP(S) application links are actionable; absent metadata uses explicit fallbacks.
 const url = computed(() => {
   try {
@@ -80,19 +76,11 @@ const posted = computed(() => {
     <div class="mt-4 flex flex-wrap items-center gap-2">
       <span
         class="rounded-lg px-3 py-1 text-sm font-semibold"
-        :class="
-          job.fit_category === 'strong_match'
-            ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300'
-            : job.fit_category === 'not_suitable'
-              ? 'bg-rose-50 dark:bg-rose-950 text-rose-800 dark:text-rose-300'
-              : 'bg-amber-50 dark:bg-amber-950 text-amber-900 dark:text-amber-300'
-        "
-        >{{
-          job.score == null
-            ? 'Score unavailable'
-            : `${Object.keys(job.model_evaluations || {}).length ? 'Average ' : ''}${job.score}/100`
-        }}
-        · {{ verdict }}</span
+        :class="fitChipClass(job.fit_category)"
+        ><template v-if="job.score != null"
+          >{{ Object.keys(job.model_evaluations || {}).length ? 'Average ' : ''
+          }}{{ job.score }}/100 · </template
+        >{{ verdict }}</span
       ><span
         title="The original posting has not been checked for current availability."
         class="text-xs text-slate-600 dark:text-slate-300"

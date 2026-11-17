@@ -30,6 +30,8 @@ class IngestionLog:
         self.omitted = 0
         self.cached = False
         self._seen = set()
+        # Distinct postings skipped because they are already in the results.
+        self.workspace = set()
 
     def add_collected(self, board, count):
         self.collected[board] = self.collected.get(board, 0) + count
@@ -39,6 +41,8 @@ class IngestionLog:
         key = f"{stage}|{reason}|{board}"
         self.counts[key] = self.counts.get(key, 0) + 1
         identity = _identity(job)
+        if reason == "already in this workspace":
+            self.workspace.add(identity)
         # Jobs already in the workspace are not losses; count them only.
         if reason == "already in this workspace" or identity in self._seen:
             return
@@ -54,6 +58,7 @@ class IngestionLog:
                 location=str(job.get("location", "")),
                 url=str(job.get("url", "")),
                 board=board,
+                posted_at=str(job.get("posted_at") or ""),
                 stage=stage,
                 reason=reason,
                 description=str(job.get("description", ""))[:DESCRIPTION_LIMIT],

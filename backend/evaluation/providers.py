@@ -10,6 +10,8 @@ from backend.schemas.evaluation import RequirementVerdict
 from backend.evaluation.evidence import score_requirements
 import os
 import hashlib
+import threading
+import time
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
@@ -130,9 +132,11 @@ def create_evaluation_llm(provider):
         return ChatAnthropic(
             model=evaluation_model_id(provider),
             **streaming_options(provider),
-            default_request_timeout=90.0,
+            # Adaptive thinking counts toward max_tokens, and each requirement can
+            # list several resume quotes; 16,000 is the safe non-streaming ceiling.
+            default_request_timeout=180.0,
             max_retries=1,
-            max_tokens=8192,
+            max_tokens=16000,
         )
     if provider == "gpt":
         from langchain_openai import ChatOpenAI
@@ -151,6 +155,63 @@ def create_evaluation_llm(provider):
             **evaluation_reasoning_options(provider),
         )
     raise ValueError("Evaluation provider must be gemini, claude or gpt.")
+
+
+# Failures that mean a provider cannot evaluate at all right now. Timeouts and
+# brief rate limits are left to the normal retry policy instead.
+UNUSABLE = {"quota", "credentials", "model"}
+AVAILABILITY_TTL_SECONDS = 600
+_AVAILABILITY = {}
+_AVAILABILITY_LOCK = threading.Lock()
+# One check per provider at a time; a second caller waits and reads the result.
+_CHECKING = {provider: threading.Lock() for provider in ("claude", "gpt", "gemini")}
+
+
+def mark_unavailable(provider, failure):
+    with _AVAILABILITY_LOCK:
+        _AVAILABILITY[provider] = (time.monotonic(), failure)
+
+
+def forget_availability(providers):
+    """Drop cached answers so the next check asks each provider again."""
+    with _AVAILABILITY_LOCK:
+        for provider in providers:
+            _AVAILABILITY.pop(provider, None)
+
+
+def check_availability(provider):
+    """Return why a provider cannot evaluate now, or None when it can.
+
+    Sends one tiny request (no resume or posting text), cached for ten minutes.
+    """
+    if os.getenv("CAREER_EVALUATION_PREFLIGHT", "true").lower() == "false":
+        return None
+    with _CHECKING[provider]:
+        with _AVAILABILITY_LOCK:
+            cached = _AVAILABILITY.get(provider)
+        if cached and time.monotonic() - cached[0] < AVAILABILITY_TTL_SECONDS:
+            return cached[1]
+        try:
+            create_evaluation_llm(provider).invoke("Reply with OK.")
+            failure = None
+        except Exception as exc:
+            failure = classify_failure(exc)
+            if failure.category not in UNUSABLE:
+                failure = None
+        with _AVAILABILITY_LOCK:
+            _AVAILABILITY[provider] = (time.monotonic(), failure)
+        return failure
+
+
+def warm_availability():
+    """Start every provider check in the background so evaluation finds it cached."""
+    for provider in _CHECKING:
+        threading.Thread(
+            target=check_availability,
+            args=(provider,),
+            name=f"availability-{provider}",
+            daemon=True,
+        ).start()
 
 
 @stage("evaluation.provider")
@@ -316,33 +377,42 @@ def evaluate_jobs(
         )
 
         evaluation = align_assessment(evaluation, requirements)
-        score, fit_category, mismatch_reason, evidence = score_requirements(
+        # The model decides the category; it returns no score. The code rubric below,
+        # with its seniority/experience guards, is saved only to compare against labels.
+        score, fit_category = None, evaluation.fit_category
+        mismatch_reason = (
+            "" if fit_category == "strong_match" else evaluation.mismatch_reason
+        )
+        rubric_score, rubric_category, rubric_reason, evidence = score_requirements(
             evaluation.requirement_verdicts, resume_context, job.page_content
         )
-        # Only corroborated code checks may override the evidence rubric.
         checked_category, checked_reason = enforce_experience_fit(
             evaluation, job, resume_context, candidate_profile
         )
         if checked_category == "not_suitable" and checked_reason.startswith(
             ("Seniority mismatch:", "Required experience exceeds profile:")
         ):
-            fit_category, mismatch_reason = checked_category, checked_reason
-            score = min(score, 39) if score is not None else None
+            rubric_category, rubric_reason = checked_category, checked_reason
+            rubric_score = min(rubric_score, 39) if rubric_score is not None else None
         elif (
-            fit_category == "strong_match"
+            rubric_category == "strong_match"
             and evaluation.experience_alignment != "meets"
         ):
-            fit_category, mismatch_reason = (
+            rubric_category, rubric_reason = (
                 "review",
                 "Professional experience alignment needs review.",
             )
-            score = min(score, 79)
+            rubric_score = min(rubric_score, 79)
         result = {
             "jobId": hashlib.sha256(
                 str(job.metadata.get("url") or (title + company)).encode()
             ).hexdigest()[:24],
             "score": score,
-            "score_method": "shared-requirements-rubric-v1",
+            "score_method": "model-decision-v1",
+            "rubric_score": rubric_score,
+            "rubric_category": rubric_category,
+            "rubric_reason": rubric_reason,
+            "rule_exception": evaluation.rule_exception,
             "requirement_set_id": hashlib.sha256(
                 json.dumps(requirements.model_dump(), sort_keys=True).encode()
             ).hexdigest(),

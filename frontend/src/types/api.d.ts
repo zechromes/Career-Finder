@@ -4,77 +4,7 @@
  */
 
 export interface paths {
-    "/api/review-datasets": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Datasets */
-        get: operations["list_datasets_api_review_datasets_get"];
-        put?: never;
-        /** Create Dataset */
-        post: operations["create_dataset_api_review_datasets_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/review-datasets/{identifier}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Dataset */
-        get: operations["get_dataset_api_review_datasets__identifier__get"];
-        put?: never;
-        post?: never;
-        /** Delete Dataset */
-        delete: operations["delete_dataset_api_review_datasets__identifier__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/review-datasets/{identifier}/jobs/{job_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Save Review */
-        put: operations["save_review_api_review_datasets__identifier__jobs__job_id__put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/review-datasets/{identifier}/metrics": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Metrics */
-        get: operations["metrics_api_review_datasets__identifier__metrics_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/review-datasets/{identifier}/replay": {
+    "/api/playground/upload": {
         parameters: {
             query?: never;
             header?: never;
@@ -83,66 +13,18 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Replay */
-        post: operations["replay_api_review_datasets__identifier__replay_post"];
+        /**
+         * Upload Stage
+         * @description Read a PDF into a profile exactly as an upload does, then check it. One live model call.
+         */
+        post: operations["upload_stage_api_playground_upload_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/experiments/options": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Options */
-        get: operations["options_api_experiments_options_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/experiments/sources": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Sources */
-        get: operations["sources_api_experiments_sources_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/experiments/sources/{source_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Dataset */
-        get: operations["dataset_api_experiments_sources__source_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/experiments": {
+    "/api/playground/ingestion": {
         parameters: {
             query?: never;
             header?: never;
@@ -151,32 +33,21 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start */
-        post: operations["start_api_experiments_post"];
+        /**
+         * Ingestion Stage
+         * @description Collect jobs live from the boards, bypassing the cache. Nothing reaches a search.
+         *
+         *     shortcut: runs inside the request (up to the collection time limit) with no
+         *     cancel; move to a background job if runs need stopping.
+         */
+        post: operations["ingestion_stage_api_playground_ingestion_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/experiments/{experiment_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Result */
-        get: operations["result_api_experiments__experiment_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/experiments/{experiment_id}/cancel": {
+    "/api/playground/retrieval": {
         parameters: {
             query?: never;
             header?: never;
@@ -185,8 +56,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Cancel */
-        post: operations["cancel_api_experiments__experiment_id__cancel_post"];
+        /**
+         * Retrieval Stage
+         * @description Rank given jobs against a profile as a real search does, in a throwaway index.
+         *
+         *     Live OpenAI embedding calls; vectors come from the shared embedding cache when present.
+         */
+        post: operations["retrieval_stage_api_playground_retrieval_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -305,6 +181,23 @@ export interface paths {
         /** Update Job Action */
         put: operations["update_job_action_api_searches__run_id__actions_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/searches/{run_id}/tailored-resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Tailored Resume */
+        post: operations["create_tailored_resume_api_searches__run_id__tailored_resume_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -548,6 +441,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Api Keys */
+        get: operations["get_api_keys_api_settings_keys_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/keys/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save Api Key */
+        put: operations["save_api_key_api_settings_keys__provider__put"];
+        post?: never;
+        /** Remove Api Key */
+        delete: operations["remove_api_key_api_settings_keys__provider__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/": {
         parameters: {
             query?: never;
@@ -688,14 +616,21 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** BoardCount */
-        BoardCount: {
-            /** Board */
-            board: string;
-            /** Collected */
-            collected: number;
-            /** Dropped */
-            dropped: number;
+        /** ApiKeyInput */
+        ApiKeyInput: {
+            /** Api Key */
+            api_key: string;
+        };
+        /** ApiKeyStatus */
+        ApiKeyStatus: {
+            /** Provider */
+            provider: string;
+            /** Label */
+            label: string;
+            /** Source */
+            source: ("settings" | "env") | null;
+            /** Hint */
+            hint: string;
         };
         /** Body_start_job_search */
         Body_start_job_search: {
@@ -708,7 +643,7 @@ export interface components {
             locations: string;
             /**
              * Platforms
-             * @default linkedin,indeed,glassdoor
+             * @default linkedin,indeed
              */
             platforms: string;
             /**
@@ -747,22 +682,10 @@ export interface components {
              */
             model: string;
         };
-        /** CreateReviewDataset */
-        CreateReviewDataset: {
-            /** Source Id */
-            source_id: string;
-        };
-        /** CriterionReview */
-        CriterionReview: {
-            /** Correct */
-            correct?: boolean | null;
-            /** Importance */
-            importance?: ("must_have" | "nice_to_have" | "unclear") | null;
-            /**
-             * Notes
-             * @default
-             */
-            notes: string;
+        /** Body_upload_stage_api_playground_upload_post */
+        Body_upload_stage_api_playground_upload_post: {
+            /** Resume */
+            resume: string;
         };
         /** DismissalInput */
         DismissalInput: {
@@ -807,53 +730,75 @@ export interface components {
              */
             seniority: string;
         };
+        /** DropCount */
+        DropCount: {
+            /** Stage */
+            stage: string;
+            /** Reason */
+            reason: string;
+            /** Board */
+            board: string;
+            /** Count */
+            count: number;
+        };
         /** DroppedJob */
         DroppedJob: {
-            /** Id */
-            id: string;
             /** Title */
             title: string;
             /** Company */
             company: string;
             /** Location */
             location: string;
-            /** Url */
-            url: string;
             /** Board */
             board: string;
+            /**
+             * Posted At
+             * @default
+             */
+            posted_at: string;
             /** Stage */
             stage: string;
             /** Reason */
             reason: string;
-            /** Description */
-            description: string;
-            duplicate_of?: components["schemas"]["DuplicateOf"] | null;
-        };
-        /** DuplicateMetrics */
-        DuplicateMetrics: {
-            /** Recorded */
-            recorded: number;
-            /** Judged */
-            judged: number;
-            /** Same */
-            same: number;
-            /** Precision */
-            precision: number | null;
-        };
-        /** DuplicateOf */
-        DuplicateOf: {
-            /** Title */
-            title: string;
-            /** Company */
-            company: string;
             /** Url */
             url: string;
-            /** Board */
-            board: string;
-            /** Description */
-            description: string;
-            /** Method */
-            method: string;
+        };
+        /** EntryEvidence */
+        EntryEvidence: {
+            /**
+             * Entry
+             * @description One work_history, sections or education entry, copied exactly as written there.
+             */
+            entry: string;
+            /**
+             * Type
+             * @description What kind of experience the entry is. Paid employment is 'job'; personal, academic or employer-unspecified projects are 'project'.
+             * @default other
+             * @enum {string}
+             */
+            type: "job" | "internship" | "project" | "hackathon" | "education" | "other";
+            /**
+             * End
+             * @description When the entry ended as YYYY-MM, 'present' if ongoing, or empty if the entry gives no date.
+             * @default
+             */
+            end: string;
+            /**
+             * Summary
+             * @description One sentence written like a job-posting responsibility, using only what the entry says. No company, product or award names, dates, money figures, or notes such as 'context not specified'.
+             * @default
+             */
+            summary: string;
+            /**
+             * Hard Skills
+             * @description Programming languages, frameworks, libraries, platforms, tools and techniques the entry shows were used, named the way job postings list requirements. Include the language a named framework or library is written in. Leave out features or results of what was built, metrics and task descriptions, and anything the entry does not support.
+             */
+            hard_skills?: string[];
+            /**
+             * Soft Skills
+             * @description Soft skills the entry shows through a described action, each named with the common term job postings use (for example 'Mentoring' for 'mentored two interns'), not a coined phrase. Never list one without such an action.
+             */
+            soft_skills?: string[];
         };
         /** EvaluationError */
         EvaluationError: {
@@ -898,279 +843,31 @@ export interface components {
              */
             skipped: boolean;
         };
-        /** EvidenceMetrics */
-        EvidenceMetrics: {
-            /** Total */
-            total: number;
-            /** Reviewed */
-            reviewed: number;
-            /** Supported */
-            supported: number;
-            /** Unsupported */
-            unsupported: number;
-            /** Uncertain */
-            uncertain: number;
-            /** Verdict Reviewed */
-            verdict_reviewed: number;
-            /** Verdict Correct */
-            verdict_correct: number;
-            /** Quotes Found */
-            quotes_found: number;
-            /** Review Coverage */
-            review_coverage: number | null;
-            /** Support Rate */
-            support_rate: number | null;
-            /** Verdict Accuracy */
-            verdict_accuracy: number | null;
-        };
-        /** EvidenceReview */
-        EvidenceReview: {
-            /** Support */
-            support?: ("supported" | "unsupported" | "uncertain") | null;
-            /** Verdict */
-            verdict?: ("met" | "partial" | "not_met" | "unknown") | null;
-            /**
-             * Notes
-             * @default
-             */
-            notes: string;
-        };
-        /** ExperimentDataset */
-        ExperimentDataset: {
-            /** Source Id */
-            source_id: string;
-            /** Fingerprint */
-            fingerprint: string;
-            /** Scope */
-            scope: string;
-            /** Jobs */
-            jobs: components["schemas"]["ExperimentJob"][];
-        };
-        /** ExperimentJob */
-        ExperimentJob: {
-            /** Id */
-            id: string;
-            /** Title */
-            title: string;
-            /**
-             * Company
-             * @default
-             */
-            company: string;
-            /** Description */
-            description: string;
-        };
-        /** ExperimentMetrics */
-        ExperimentMetrics: {
-            /** Label Coverage */
-            label_coverage: number;
-            /** Observed Recall At K */
-            observed_recall_at_k?: number | null;
-            /** Precision On Labeled */
-            precision_on_labeled?: number | null;
-            /** Missed Labeled Positives */
-            missed_labeled_positives?: string[];
-            /**
-             * Unlabeled Selected
-             * @default 0
-             */
-            unlabeled_selected: number;
-        };
-        /** ExperimentModel */
-        ExperimentModel: {
-            /** Value */
-            value: string;
-            /** Label */
-            label: string;
-            /** Model Id */
-            model_id: string;
-        };
-        /** ExperimentOptions */
-        ExperimentOptions: {
-            /** Generation Models */
-            generation_models: components["schemas"]["ExperimentModel"][];
-            /** Embedding Models */
-            embedding_models: string[];
-        };
-        /** ExperimentRequest */
-        ExperimentRequest: {
-            /** Source Id */
-            source_id: string;
-            /** Fingerprint */
-            fingerprint: string;
-            /**
-             * Phase
-             * @default both
-             * @enum {string}
-             */
-            phase: "retrieval" | "generation" | "both";
-            /** Embedding Models */
-            embedding_models?: ("text-embedding-3-small" | "text-embedding-3-large")[];
-            /** Providers */
-            providers?: ("claude" | "gpt" | "gemini")[];
-            /**
-             * Top K
-             * @default 5
-             */
-            top_k: number;
-            /** Labels */
-            labels?: {
-                [key: string]: boolean;
-            };
-        };
-        /** ExperimentResult */
-        ExperimentResult: {
-            /** Id */
-            id: string;
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "running" | "complete" | "partial" | "failed" | "cancelled";
-            /** Source Id */
-            source_id: string;
-            /** Created At */
-            created_at: number;
-            /** Fingerprint */
-            fingerprint: string;
-            /** Scope */
-            scope: string;
-            /** Phase */
-            phase: string;
-            /** Top K */
-            top_k: number;
-            /** Pool Size */
-            pool_size: number;
-            settings: components["schemas"]["ExperimentRequest"];
-            /** Message */
-            message: string;
-            /** Retrieval */
-            retrieval?: components["schemas"]["RetrievalTrial"][];
-            /** Generation */
-            generation?: components["schemas"]["GenerationTrial"][];
-        };
-        /** ExperimentSource */
-        ExperimentSource: {
-            /** Id */
-            id: string;
-            /** Name */
-            name: string;
-            /** Job Count */
-            job_count: number;
-        };
-        /** ExtractionMetrics */
-        ExtractionMetrics: {
-            /** Total */
-            total: number;
-            /** Reviewed */
-            reviewed: number;
-            /** Precision */
-            precision: number | null;
-            /** Importance Accuracy */
-            importance_accuracy: number | null;
-            /** Completeness Reviewed Jobs */
-            completeness_reviewed_jobs: number;
-            /** Missed Requirements */
-            missed_requirements: number;
-            /** Recall On Complete Reviews */
-            recall_on_complete_reviews: number | null;
-        };
         /** FindMoreRequest */
         FindMoreRequest: {
             preferences: components["schemas"]["Preferences"];
-        };
-        /** GenerationMetrics */
-        GenerationMetrics: {
-            /** Model */
-            model: string;
-            /** Assessed */
-            assessed: number;
-            /** Failed */
-            failed: number;
-            human_good: components["schemas"]["VerdictCounts"];
-            human_not_fit: components["schemas"]["VerdictCounts"];
-            /** Strong Match Precision */
-            strong_match_precision: number | null;
-            /** Good Fit Recall */
-            good_fit_recall: number | null;
-            /** Good Fits Rejected */
-            good_fits_rejected: string[];
-        };
-        /** GenerationTrial */
-        GenerationTrial: {
-            /** Provider */
-            provider: string;
-            /** Model */
-            model: string;
-            /** Seconds */
-            seconds: number;
-            /** Input Ids */
-            input_ids: string[];
-            /** Results */
-            results?: components["schemas"]["JobResult"][];
-            /** Errors */
-            errors?: string[];
-            metrics: components["schemas"]["ExperimentMetrics"];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
-        /** IngestionCount */
-        IngestionCount: {
-            /** Stage */
-            stage: string;
-            /** Reason */
-            reason: string;
-            /** Board */
-            board: string;
-            /** Count */
-            count: number;
-        };
-        /** IngestionMetrics */
-        IngestionMetrics: {
-            /** Available */
-            available: boolean;
-            /** Complete */
-            complete: boolean;
-            /** Searches */
-            searches: number;
-            /** Collected */
-            collected: number;
-            /** Kept */
-            kept: number;
-            /** Omitted */
-            omitted: number;
-            /** By Reason */
-            by_reason: components["schemas"]["ReasonCount"][];
-            /** By Board */
-            by_board: components["schemas"]["BoardCount"][];
-            /** Dropped Recorded */
-            dropped_recorded: number;
-            /** Labeled */
-            labeled: number;
-            /** Good Fits */
-            good_fits: number;
-            duplicates: components["schemas"]["DuplicateMetrics"];
-            search_text: components["schemas"]["SearchTextMetrics"];
-        };
-        /** IngestionRecord */
-        IngestionRecord: {
-            /** Searches */
-            searches: number;
-            /** Complete */
-            complete: boolean;
+        /** IngestionPlayground */
+        IngestionPlayground: {
+            /** Status */
+            status: string;
+            /** Messages */
+            messages: string[];
             /** Collected */
             collected: {
                 [key: string]: number;
             };
-            /** Kept */
-            kept: number;
             /** Counts */
-            counts: components["schemas"]["IngestionCount"][];
-            /** Omitted */
-            omitted: number;
+            counts: components["schemas"]["DropCount"][];
+            /** Jobs */
+            jobs: components["schemas"]["PlaygroundJob"][];
+            /** Dropped */
+            dropped: components["schemas"]["DroppedJob"][];
         };
         /** JobActionUpdate */
         JobActionUpdate: {
@@ -1200,6 +897,7 @@ export interface components {
         };
         /** JobResult */
         JobResult: {
+            tailored_resume?: components["schemas"]["TailoredResume"] | null;
             /**
              * Completed Models
              * @default 0
@@ -1210,6 +908,8 @@ export interface components {
              * @default 0
              */
             agreement_count: number;
+            /** Shortlist Rank */
+            shortlist_rank?: number | null;
             /** Provisional Score */
             provisional_score?: number | null;
             /**
@@ -1349,59 +1049,6 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** JobReview */
-        JobReview: {
-            /** Fit */
-            fit?: ("strong_match" | "review" | "not_suitable") | null;
-            /**
-             * Ai Assisted
-             * @default false
-             */
-            ai_assisted: boolean;
-            /** Duplicate Correct */
-            duplicate_correct?: boolean | null;
-            /**
-             * Notes
-             * @default
-             */
-            notes: string;
-            /**
-             * Extraction Complete
-             * @default false
-             */
-            extraction_complete: boolean;
-            /** Criteria */
-            criteria?: {
-                [key: string]: components["schemas"]["CriterionReview"];
-            };
-            /** Missing Requirements */
-            missing_requirements?: components["schemas"]["MissingRequirement"][];
-            /** Evidence */
-            evidence?: {
-                [key: string]: components["schemas"]["EvidenceReview"];
-            };
-        };
-        /** MissedJob */
-        MissedJob: {
-            /** Id */
-            id: string;
-            /** Title */
-            title: string;
-            /** Experienced Title */
-            experienced_title: boolean;
-        };
-        /** MissingRequirement */
-        MissingRequirement: {
-            /** Requirement */
-            requirement: string;
-            /** Job Quote */
-            job_quote: string;
-            /**
-             * Importance
-             * @enum {string}
-             */
-            importance: "must_have" | "nice_to_have" | "unclear";
-        };
         /** ModelEvaluation */
         ModelEvaluation: {
             /**
@@ -1419,7 +1066,7 @@ export interface components {
              * @default pending
              * @enum {string}
              */
-            status: "pending" | "complete" | "failed";
+            status: "pending" | "complete" | "failed" | "skipped";
             /**
              * Error
              * @default
@@ -1438,6 +1085,11 @@ export interface components {
              * @default
              */
             rationale: string;
+            /**
+             * Rule Exception
+             * @default
+             */
+            rule_exception: string;
             /**
              * Mismatch Reason
              * @default
@@ -1491,19 +1143,27 @@ export interface components {
             /** Label */
             label: string;
         };
-        /** ModelVerdict */
-        ModelVerdict: {
+        /** PlaygroundJob */
+        PlaygroundJob: {
+            /** Title */
+            title: string;
+            /** Company */
+            company: string;
+            /** Location */
+            location: string;
+            /** Board */
+            board: string;
+            /** Posted At */
+            posted_at: string;
+            /** Url */
+            url: string;
+            /** Description Chars */
+            description_chars: number;
             /**
-             * Model
+             * Description
              * @default
              */
-            model: string;
-            /** Status */
-            status: string;
-            /** Fit Category */
-            fit_category?: string | null;
-            /** Score */
-            score?: number | null;
+            description: string;
         };
         /** Preferences */
         Preferences: {
@@ -1512,7 +1172,7 @@ export interface components {
             /** Locations */
             locations?: string[];
             /** Platforms */
-            platforms?: ("linkedin" | "indeed" | "glassdoor" | "seek")[];
+            platforms?: ("linkedin" | "indeed" | "seek" | "google" | "adzuna")[];
             /**
              * Work Type
              * @default any
@@ -1535,7 +1195,7 @@ export interface components {
             posted_days_old: 0 | 1 | 7 | 30;
             /**
              * Top K
-             * @default 50
+             * @default -1
              */
             top_k: number;
             /**
@@ -1550,58 +1210,30 @@ export interface components {
             profile: components["schemas"]["ResumeProfile"];
             preferences: components["schemas"]["Preferences"];
         };
-        /** ReasonCount */
-        ReasonCount: {
-            /** Stage */
-            stage: string;
-            /** Reason */
-            reason: string;
-            /** Count */
-            count: number;
-            /** Labeled */
-            labeled: number;
-            /** Good Fits */
-            good_fits: number;
-        };
-        /** ReplayResult */
-        ReplayResult: {
-            /** Dataset Id */
-            dataset_id: string;
-            /** Embedding Model */
-            embedding_model: string;
-            /** Ranked At */
-            ranked_at: number;
-            /** Searches */
-            searches: number;
-            /** Top K */
-            top_k: number;
-            /** Unranked */
-            unranked: number;
-            /** Rules */
-            rules: components["schemas"]["ReplayRule"][];
-            /** Limitations */
-            limitations: string[];
-        };
-        /** ReplayRule */
-        ReplayRule: {
-            /** Rule */
-            rule: string;
-            /** Name */
-            name: string;
-            /** Shortlist Size */
-            shortlist_size: number;
-            /** Matches Original */
-            matches_original: number | null;
-            metrics: components["schemas"]["ExperimentMetrics"];
-            /** Good Fits Added */
-            good_fits_added: string[];
-            /** Not Fits Added */
-            not_fits_added: string[];
-            /** Unassessed Added */
-            unassessed_added: number;
+        /** RankedJob */
+        RankedJob: {
+            /** Rank */
+            rank: number;
+            /** Title */
+            title: string;
+            /** Company */
+            company: string;
+            /** Location */
+            location: string;
+            /** Board */
+            board: string;
+            /** Url */
+            url: string;
+            /** Above Level */
+            above_level: boolean;
         };
         /** ResumeProfile */
         ResumeProfile: {
+            /**
+             * Section Headings
+             * @description Every section heading in the resume, in order, exactly as written. List them before filling the other fields so no section is skipped.
+             */
+            section_headings?: string[];
             /**
              * Name
              * @default
@@ -1617,15 +1249,35 @@ export interface components {
             /** Education */
             education?: string[];
             /**
+             * Sections
+             * @description Every other resume section under its own heading, for example Projects, Certifications, Publications, Volunteering, Awards, Research, Leadership or Languages. Leave out what is already in work_history, education, skills or the summary, and contact details. Evidence of skills, never of employment years.
+             */
+            sections?: components["schemas"]["ResumeSection"][];
+            /**
              * Tech Skills
              * @description List of Familiar Programming Languages or Frameworks (e.g. Python, C++, JavaScript, Java, ReactJS, NodeJS)
              */
             tech_skills?: string[];
             /**
+             * Skill Groups
+             * @description Every tech_skills entry placed in exactly one group of related skills, so each group describes one kind of work.
+             */
+            skill_groups?: components["schemas"]["SkillGroup"][];
+            /**
+             * Keyword Queries
+             * @description One or two lines of 6-12 space-separated terms from tech_skills for exact matching against job ads, most important first, for example 'Python FastAPI React PostgreSQL Docker'. Use names employers list; no soft skills, no terms the resume does not support.
+             */
+            keyword_queries?: string[];
+            /**
              * Soft Skills
              * @description List of Soft skills (e.g. Responsibility, Curiosity, Leadership)
              */
             soft_skills?: string[];
+            /**
+             * Entry Evidence
+             * @description One item per work_history, sections and education entry: what was done there and the hard and soft skills it demonstrates.
+             */
+            entry_evidence?: components["schemas"]["EntryEvidence"][];
             /**
              * Years Of Experience
              * @description Completed years of paid professional employment, excluding degree duration, coursework and personal/academic projects. Avoid double-counting overlapping dates. Do not round internships up to full years.
@@ -1645,203 +1297,81 @@ export interface components {
             experience_evidence?: string[];
             /**
              * Preferred Domains
-             * @description Domain of Interest (e.g. AI Engineer, Software Engineer, Full Stack Web Developer)
+             * @description Three to six realistic job titles to search for now, inferred from the whole resume (work history, sections, education and skills) at the candidate's career level, for example 'Graduate Data Analyst' or 'Junior Python Developer', including common variants employers use for the same work. Include a stated interest only when the resume supports it.
              */
             preferred_domains?: string[];
+            /**
+             * Target Roles Reason
+             * @description One or two sentences on why these job titles fit, citing the resume evidence and career level.
+             * @default
+             */
+            target_roles_reason: string;
             /**
              * Profile
              * @description A brief summary of candidate's professional bacground and academic focus
              * @default
              */
             profile: string;
-        };
-        /** RetrievalTrial */
-        RetrievalTrial: {
-            /** Model */
-            model: string;
-            /** Seconds */
-            seconds: number;
-            /** Ranked Ids */
-            ranked_ids: string[];
-            metrics: components["schemas"]["ExperimentMetrics"];
-            /** Error */
-            error?: string | null;
-        };
-        /** ReviewBundle */
-        ReviewBundle: {
-            dataset: components["schemas"]["ReviewDataset"];
-            labels: components["schemas"]["ReviewState"];
-        };
-        /** ReviewCriterion */
-        ReviewCriterion: {
-            /** Id */
-            id: string;
-            /** Requirement */
-            requirement: string;
-            /** Importance */
-            importance: string;
-            /** Job Quote */
-            job_quote: string;
             /**
-             * Section
+             * Source Text
              * @default
              */
-            section: string;
-            /** Origin */
-            origin: string;
-            /**
-             * Extraction Model
-             * @default
-             */
-            extraction_model: string;
-            /**
-             * Extraction Version
-             * @default
-             */
-            extraction_version: string;
-            /**
-             * Set Id
-             * @default
-             */
-            set_id: string;
+            source_text: string;
         };
-        /** ReviewDataset */
-        ReviewDataset: {
-            /** Id */
-            id: string;
-            /** Created At */
-            created_at: number;
-            /** Source Id */
-            source_id: string;
-            /** Fingerprint */
-            fingerprint: string;
-            /** Scope */
-            scope: string;
+        /** ResumeSection */
+        ResumeSection: {
             /**
-             * Split
-             * @default pilot
-             * @constant
+             * Heading
+             * @description The section heading exactly as the resume writes it.
              */
-            split: "pilot";
+            heading: string;
+            /**
+             * Entries
+             * @description Each item in the section as 'Title | Context | Month Year – Month Year | Details', keeping only the parts the resume gives, with its tools, scope and outcomes.
+             */
+            entries?: string[];
+        };
+        /** RetrievalPlayground */
+        RetrievalPlayground: {
+            /** Queries */
+            queries: components["schemas"]["RetrievalQuery"][];
+            /** Ranked */
+            ranked: components["schemas"]["RankedJob"][];
+            /** Total Jobs */
+            total_jobs: number;
+        };
+        /** RetrievalQuery */
+        RetrievalQuery: {
+            /** Text */
+            text: string;
+            /** Weight */
+            weight: number;
+        };
+        /** RetrievalRequest */
+        RetrievalRequest: {
             profile: components["schemas"]["ResumeProfile"];
-            /** Profile Text */
-            profile_text: string;
-            /** Target Roles */
-            target_roles: string[];
+            /** Queries */
+            queries: string[];
             /** Jobs */
-            jobs: components["schemas"]["ReviewJob"][];
-            /** Verdicts Added At */
-            verdicts_added_at?: number | null;
-            ingestion?: components["schemas"]["IngestionRecord"] | null;
-            /** Dropped Jobs */
-            dropped_jobs?: components["schemas"]["DroppedJob"][];
-        };
-        /** ReviewDatasetSummary */
-        ReviewDatasetSummary: {
-            /** Id */
-            id: string;
-            /** Created At */
-            created_at: number;
-            /** Job Count */
-            job_count: number;
-            /** Outside Shortlist */
-            outside_shortlist: number;
-            /** Reviewed Jobs */
-            reviewed_jobs: number;
-        };
-        /** ReviewEvidence */
-        ReviewEvidence: {
-            /** Id */
-            id: string;
-            /** Provider */
-            provider: string;
-            /** Model */
-            model: string;
-            /** Requirement */
-            requirement: string;
-            /** Verdict */
-            verdict: string;
-            /** Job Quote */
-            job_quote: string;
-            /** Resume Quote */
-            resume_quote: string;
-            /** Explanation */
-            explanation: string;
-            /** Job Quote Found */
-            job_quote_found: boolean;
-            /** Profile Quote Found */
-            profile_quote_found: boolean;
-        };
-        /** ReviewJob */
-        ReviewJob: {
-            /** Id */
-            id: string;
-            /** Title */
-            title: string;
-            /** Company */
-            company: string;
-            /** Url */
-            url: string;
-            /** Description */
-            description: string;
-            /** Previously Shortlisted */
-            previously_shortlisted: boolean;
-            /** Tags */
-            tags: string[];
-            /** Criteria */
-            criteria: components["schemas"]["ReviewCriterion"][];
-            /** Evidence */
-            evidence: components["schemas"]["ReviewEvidence"][];
-            /** Extraction Available */
-            extraction_available: boolean;
-            /** Model Verdicts */
-            model_verdicts?: {
-                [key: string]: components["schemas"]["ModelVerdict"];
-            };
-            /** App Verdict */
-            app_verdict?: string | null;
-        };
-        /** ReviewMetrics */
-        ReviewMetrics: {
-            /** Dataset Id */
-            dataset_id: string;
-            /** Revision */
-            revision: number;
-            /** Split */
-            split: string;
-            /** Pool Size */
-            pool_size: number;
-            /** Fit Reviewed */
-            fit_reviewed: number;
-            /** Ai Assisted Reviews */
-            ai_assisted_reviews: number;
-            retrieval: components["schemas"]["ExperimentMetrics"];
-            extraction: components["schemas"]["ExtractionMetrics"];
-            /** Evidence */
-            evidence: {
-                [key: string]: components["schemas"]["EvidenceMetrics"];
-            };
-            stages: components["schemas"]["StageMetrics"];
-            /** Limitations */
-            limitations: string[];
-        };
-        /** ReviewState */
-        ReviewState: {
+            jobs: components["schemas"]["PlaygroundJob"][];
             /**
-             * Revision
-             * @default 0
+             * Top K
+             * @default -1
+             * @enum {integer}
              */
-            revision: number;
-            /** Jobs */
-            jobs?: {
-                [key: string]: components["schemas"]["JobReview"];
-            };
-            /** Reviewers */
-            reviewers?: {
-                [key: string]: string;
-            };
-            /** Updated At */
-            updated_at?: number | null;
+            top_k: -1 | 0 | 15 | 50 | 100;
+            /**
+             * Seniority
+             * @default auto
+             * @enum {string}
+             */
+            seniority: "auto" | "any";
+            /**
+             * Query Builder
+             * @default hyde
+             * @enum {string}
+             */
+            query_builder: "evidence" | "skills" | "legacy" | "hyde";
         };
         /** RunCreated */
         RunCreated: {
@@ -1899,6 +1429,8 @@ export interface components {
              * @default 0
              */
             last_search_added: number;
+            /** Searches */
+            searches?: components["schemas"]["SearchRecord"][];
             /**
              * Jobs Found
              * @default 0
@@ -1925,6 +1457,16 @@ export interface components {
              */
             evaluation_failed: number;
             /**
+             * Retry Total
+             * @default 0
+             */
+            retry_total: number;
+            /**
+             * Retry Done
+             * @default 0
+             */
+            retry_done: number;
+            /**
              * Displayed Jobs
              * @default 0
              */
@@ -1942,6 +1484,10 @@ export interface components {
             evaluation_errors?: components["schemas"]["EvaluationError"][];
             /** Scrape Errors */
             scrape_errors?: string[];
+            /** Skipped Models */
+            skipped_models?: string[];
+            /** Busy Boards */
+            busy_boards?: string[];
             /**
              * Evaluation Model Id
              * @default
@@ -1964,14 +1510,6 @@ export interface components {
             worker_active: boolean;
         } & {
             [key: string]: unknown;
-        };
-        /** SaveReview */
-        SaveReview: {
-            /** Revision */
-            revision: number;
-            /** Reviewer */
-            reviewer: string;
-            review: components["schemas"]["JobReview"];
         };
         /** SavedProfile */
         SavedProfile: {
@@ -2012,60 +1550,140 @@ export interface components {
             /** Source Run Id */
             source_run_id?: string | null;
         };
-        /** SearchTextJob */
-        SearchTextJob: {
-            /** Id */
-            id: string;
+        /** SearchRecord */
+        SearchRecord: {
+            /** At */
+            at: string;
+            /** Platforms */
+            platforms?: string[];
+            /** Queries */
+            queries?: string[];
+            /** Locations */
+            locations?: string[];
+        };
+        /** SkillGroup */
+        SkillGroup: {
+            /**
+             * Name
+             * @description A short area of work, for example 'LLM applications', 'Backend' or 'Data analysis'.
+             */
+            name: string;
+            /**
+             * Skills
+             * @description Skills from tech_skills, written exactly as listed there.
+             */
+            skills?: string[];
+            /**
+             * Query
+             * @description One 15-35 word sentence a job ad would use for this kind of work, for example 'Build and deploy backend REST APIs using Python, FastAPI and PostgreSQL.' Name the mainstream tools employers list and describe niche models or tools by their category ('U-Net' becomes 'image segmentation models'). Leave out project, dataset and domain details, team words such as 'collaboratively', and work the resume does not show.
+             * @default
+             */
+            query: string;
+        };
+        /** TailoredEntry */
+        TailoredEntry: {
+            /** Heading */
+            heading: string;
+            /**
+             * Organization
+             * @default
+             */
+            organization: string;
+            /**
+             * Location
+             * @default
+             */
+            location: string;
+            /**
+             * Dates
+             * @default
+             */
+            dates: string;
+            /** Bullets */
+            bullets?: string[];
+        };
+        /** TailoredResume */
+        TailoredResume: {
+            /**
+             * Name
+             * @default
+             */
+            name: string;
+            /**
+             * Headline
+             * @default
+             */
+            headline: string;
+            /** Contact */
+            contact?: string[];
+            /** Profile Points */
+            profile_points?: string[];
+            /** Skills */
+            skills?: string[];
+            /** Sections */
+            sections?: components["schemas"]["TailoredSection"][];
+            /** Gaps */
+            gaps?: string[];
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+            /** Unverified */
+            unverified?: string[];
+            /**
+             * Model
+             * @default
+             */
+            model: string;
+            /**
+             * Generated At
+             * @default 0
+             */
+            generated_at: number;
+        };
+        /** TailoredResumeRequest */
+        TailoredResumeRequest: {
+            /** Key */
+            key: string;
+        };
+        /** TailoredSection */
+        TailoredSection: {
             /** Title */
             title: string;
-            /** Kept */
-            kept: number;
-            /** Total */
-            total: number;
+            /** Entries */
+            entries?: components["schemas"]["TailoredEntry"][];
         };
-        /** SearchTextMetrics */
-        SearchTextMetrics: {
-            /** Jobs Checked */
-            jobs_checked: number;
-            /** Quotes */
-            quotes: number;
-            /** Kept */
-            kept: number;
-            /** Rate */
-            rate: number | null;
-            /** Lowest */
-            lowest: components["schemas"]["SearchTextJob"][];
+        /** UnsupportedEntry */
+        UnsupportedEntry: {
+            /** Field */
+            field: string;
+            /** Entry */
+            entry: string;
+            /** Found Share */
+            found_share: number;
         };
-        /** StageFunnel */
-        StageFunnel: {
-            /** Good Fits */
-            good_fits: number;
-            /** Lost At Ingestion */
-            lost_at_ingestion: number;
-            /** Lost At Retrieval */
-            lost_at_retrieval: number;
-            /** Not Assessed */
-            not_assessed: number;
-            /** Rejected At Generation */
-            rejected_at_generation: number;
-            /** Needs Review */
-            needs_review: number;
-            /** Recommended */
-            recommended: number;
+        /** UploadCheck */
+        UploadCheck: {
+            /** Source Text Available */
+            source_text_available: boolean;
+            /** Missing Fields */
+            missing_fields: string[];
+            /** Empty Sections */
+            empty_sections: string[];
+            /** Entries Checked */
+            entries_checked: number;
+            /** Unsupported Entries */
+            unsupported_entries: components["schemas"]["UnsupportedEntry"][];
+            /** Skills Not In Resume */
+            skills_not_in_resume: string[];
+            /** Years Check */
+            years_check: string;
         };
-        /** StageMetrics */
-        StageMetrics: {
-            /** Verdicts Available */
-            verdicts_available: boolean;
-            funnel: components["schemas"]["StageFunnel"];
-            ingestion: components["schemas"]["IngestionMetrics"];
-            /** Retrieval Missed */
-            retrieval_missed: components["schemas"]["MissedJob"][];
-            /** Generation */
-            generation: {
-                [key: string]: components["schemas"]["GenerationMetrics"];
-            };
-            app: components["schemas"]["GenerationMetrics"] | null;
+        /** UploadPlayground */
+        UploadPlayground: {
+            profile: components["schemas"]["ResumeProfile"];
+            check: components["schemas"]["UploadCheck"];
         };
         /** ValidationError */
         ValidationError: {
@@ -2079,24 +1697,6 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
-        };
-        /** VerdictCounts */
-        VerdictCounts: {
-            /**
-             * Strong Match
-             * @default 0
-             */
-            strong_match: number;
-            /**
-             * Review
-             * @default 0
-             */
-            review: number;
-            /**
-             * Not Suitable
-             * @default 0
-             */
-            not_suitable: number;
         };
         /** VerifiedRequirement */
         VerifiedRequirement: {
@@ -2131,10 +1731,10 @@ export interface components {
             /** Job Quote */
             job_quote: string;
             /**
-             * Resume Quote
-             * @default
+             * Resume Quotes
+             * @description Every short verbatim resume passage that supports this verdict, usually one to three, from any section; empty when the resume does not mention the requirement.
              */
-            resume_quote: string;
+            resume_quotes?: string[];
             /**
              * Explanation
              * @default
@@ -2150,6 +1750,13 @@ export interface components {
              * @default false
              */
             resume_evidence_verified: boolean;
+            /**
+             * Resume Quote
+             * @default
+             */
+            resume_quote: string;
+            /** Resume Quotes Verified */
+            resume_quotes_verified?: boolean[];
         };
     };
     responses: never;
@@ -2160,27 +1767,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    list_datasets_api_review_datasets_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReviewDatasetSummary"][];
-                };
-            };
-        };
-    };
-    create_dataset_api_review_datasets_post: {
+    upload_stage_api_playground_upload_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2189,17 +1776,17 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateReviewDataset"];
+                "multipart/form-data": components["schemas"]["Body_upload_stage_api_playground_upload_post"];
             };
         };
         responses: {
             /** @description Successful Response */
-            201: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ReviewBundle"];
+                    "application/json": components["schemas"]["UploadPlayground"];
                 };
             };
             /** @description Validation Error */
@@ -2213,238 +1800,7 @@ export interface operations {
             };
         };
     };
-    get_dataset_api_review_datasets__identifier__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                identifier: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReviewBundle"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_dataset_api_review_datasets__identifier__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                identifier: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    save_review_api_review_datasets__identifier__jobs__job_id__put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                identifier: string;
-                job_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SaveReview"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReviewState"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    metrics_api_review_datasets__identifier__metrics_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                identifier: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReviewMetrics"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    replay_api_review_datasets__identifier__replay_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                identifier: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReplayResult"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    options_api_experiments_options_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ExperimentOptions"];
-                };
-            };
-        };
-    };
-    sources_api_experiments_sources_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ExperimentSource"][];
-                };
-            };
-        };
-    };
-    dataset_api_experiments_sources__source_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                source_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ExperimentDataset"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    start_api_experiments_post: {
+    ingestion_stage_api_playground_ingestion_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2453,17 +1809,17 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ExperimentRequest"];
+                "application/json": components["schemas"]["Preferences"];
             };
         };
         responses: {
             /** @description Successful Response */
-            202: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ExperimentResult"];
+                    "application/json": components["schemas"]["IngestionPlayground"];
                 };
             };
             /** @description Validation Error */
@@ -2477,16 +1833,18 @@ export interface operations {
             };
         };
     };
-    result_api_experiments__experiment_id__get: {
+    retrieval_stage_api_playground_retrieval_post: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                experiment_id: string;
-            };
+            path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetrievalRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -2494,38 +1852,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ExperimentResult"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    cancel_api_experiments__experiment_id__cancel_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                experiment_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ExperimentResult"];
+                    "application/json": components["schemas"]["RetrievalPlayground"];
                 };
             };
             /** @description Validation Error */
@@ -2813,6 +2140,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobActions"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_tailored_resume_api_searches__run_id__tailored_resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TailoredResumeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TailoredResume"];
                 };
             };
             /** @description Validation Error */
@@ -3227,6 +2589,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_api_keys_api_settings_keys_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiKeyStatus"][];
+                };
+            };
+        };
+    };
+    save_api_key_api_settings_keys__provider__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: "openai" | "anthropic" | "google";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApiKeyInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiKeyStatus"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_api_key_api_settings_keys__provider__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: "openai" | "anthropic" | "google";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiKeyStatus"][];
                 };
             };
             /** @description Validation Error */

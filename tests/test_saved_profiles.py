@@ -159,3 +159,40 @@ class SavedProfileTests(unittest.TestCase):
             self.assertEqual(client.post(endpoint).json()["runId"], first)
             runs.RUNS[fresh].update(phase=2, status="running")
             self.assertEqual(client.post(endpoint).json()["runId"], fresh)
+
+
+class UnsavedUploadTests(unittest.TestCase):
+    def test_saving_before_a_search_writes_the_in_memory_upload(self):
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "backend.profiles.storage.PROFILES_DIR", Path(directory) / "profiles"
+        ), patch.object(runs, "RUNS_DIR", Path(directory) / "runs"), patch.object(
+            runs, "RUNS", {}
+        ), patch.object(
+            runs, "RUN_CONTEXTS", {}
+        ), patch.object(
+            runs, "UNSAVED", {}
+        ):
+            source_id = "b" * 32
+            profile = ResumeProfile(name="Candidate", headline="Engineer", profile="APIs")
+            runs.RUNS[source_id] = {
+                "id": source_id,
+                "status": "awaiting_search",
+                "profile": profile.model_dump(),
+            }
+            runs.UNSAVED[source_id] = b"%PDF-1.4 unsaved upload"
+            response = TestClient(web.app).post(
+                "/api/profiles",
+                json={
+                    "name": "Resume",
+                    "source_run_id": source_id,
+                    "profile": profile.model_dump(),
+                },
+            )
+            self.assertEqual(response.status_code, 201, response.text)
+            self.assertTrue(response.json()["resume_available"])
+            self.assertEqual(
+                (runs.RUNS_DIR / source_id / "resume.pdf").read_bytes(),
+                b"%PDF-1.4 unsaved upload",
+            )
+            self.assertTrue(runs.run_state_path(source_id).is_file())
+            self.assertNotIn(source_id, runs.UNSAVED)

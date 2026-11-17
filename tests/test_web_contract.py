@@ -45,6 +45,7 @@ class WebContractTests(unittest.TestCase):
             ("RUN_CONTEXTS", {}),
             ("ACTIVE_WORKERS", set()),
             ("DELETING", set()),
+            ("UNSAVED", {}),
         ]:
             patcher = patch.object(runs, name, value)
             patcher.start()
@@ -365,9 +366,28 @@ class WebContractTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 201)
         self.assertEqual(events, ["read", "validate", "allocate"])
+        # Nothing reaches disk until the user searches or saves the profile.
+        self.assertEqual(list(runs.RUNS_DIR.iterdir()), [])
+        self.assertEqual(runs.snapshot("accepted")["profile"]["name"], "Example")
+        self.assertIn("accepted", runs.RUN_CONTEXTS)
+        runs.commit_upload("accepted")
         self.assertEqual(
             (runs.RUNS_DIR / "accepted" / "resume.pdf").read_bytes(), pdf_bytes
         )
+        self.assertEqual(
+            json.loads(runs.run_state_path("accepted").read_text())["profile"]["name"],
+            "Example",
+        )
+        self.assertTrue(runs.run_context_path("accepted").is_file())
+
+    def test_abandoned_upload_is_deleted_without_touching_disk(self):
+        runs.UNSAVED["draft"] = b"%PDF-1.4 synthetic"
+        runs.RUNS["draft"] = {"id": "draft", "status": "awaiting_search", "profile": {}}
+        runs.ACTIVE_WORKERS.add("draft")
+        runs.persist_run("draft")
+        runs.remove_run("draft")
+        self.assertEqual(list(runs.RUNS_DIR.iterdir()), [])
+        self.assertNotIn("draft", runs.UNSAVED)
 
     def test_upload_rejects_unreadable_text_before_creating_workspace(self):
         self._assert_upload_rejected(
