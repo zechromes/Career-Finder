@@ -407,12 +407,9 @@ test('automatic evaluations show model comparison with readable evidence on mobi
   await page.getByRole('button', { name: /Google Gemini/ }).click()
   await expect(page.getByText('Gemini recommends reviewing experience.')).toBeVisible()
   await page.getByRole('button', { name: /Anthropic Claude/ }).click()
-  await expect(
-    page
-      .getByRole('region', { name: 'Requirement evidence', exact: true })
-      .getByText('Developed Python APIs', { exact: true })
-      .first(),
-  ).toBeVisible()
+  // Quotes sit inside each collapsed requirement; open it to compare posting and resume.
+  await page.getByText('Python API development', { exact: true }).click()
+  await expect(page.getByText('Developed Python APIs', { exact: true })).toBeVisible()
   await page.setViewportSize({ width: 390, height: 844 })
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,

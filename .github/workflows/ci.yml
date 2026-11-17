@@ -1,4 +1,4 @@
-name: Career Tracker checks
+name: Career Finder checks
 on: [push, pull_request]
 jobs:
   test:
@@ -15,7 +15,12 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: sudo apt-get update && sudo apt-get install -y tesseract-ocr fonts-dejavu-core
       - run: pip install -r backend/requirements.txt
+      # Same as scripts/check.sh: no live availability checks, HyDE calls or tracing.
       - run: python -m unittest discover -s tests
+        env:
+          CAREER_LANGSMITH_TRACING: 'false'
+          CAREER_EVALUATION_PREFLIGHT: 'false'
+          QUERY_BUILDER: evidence
       - run: npm ci
         working-directory: frontend
       - run: npm run types:generate && git diff --exit-code -- openapi.json src/types/api.d.ts
